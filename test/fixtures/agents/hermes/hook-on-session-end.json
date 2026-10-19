@@ -1,0 +1,18 @@
+{
+  "hook_event_name": "on_session_end",
+  "tool_name": null,
+  "tool_input": null,
+  "session_id": "20261013_101500_ab12cd",
+  "cwd": "/work/api-worker",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261013_101500_ab12cd",
+    "turn_id": "turn_02",
+    "completed": true,
+    "failed": false,
+    "interrupted": false,
+    "turn_exit_reason": "text_response",
+    "model": "anthropic/claude-sonnet-4.6",
+    "platform": "cli"
+  }
+}

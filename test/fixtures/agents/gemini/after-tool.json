@@ -1,0 +1,10 @@
+{
+  "session_id": "7f3e9a52-4b1c-4d6e-9a38-0c2d5e8f1b64",
+  "transcript_path": "/home/dev/.gemini/tmp/5d1c7a0e/chats/session-2026-10-13T12-00-7f3e9a52.json",
+  "cwd": "/work/api-worker",
+  "hook_event_name": "AfterTool",
+  "timestamp": "2026-10-13T12:00:11.000Z",
+  "tool_name": "read_file",
+  "tool_input": { "file_path": "src/index.ts" },
+  "tool_response": { "llmContent": "export const x = 1;\n", "returnDisplay": "" }
+}

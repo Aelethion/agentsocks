@@ -1,0 +1,6 @@
+base: &b
+  mcp_servers:
+    github:
+      command: npx
+<<: *b
+model: x

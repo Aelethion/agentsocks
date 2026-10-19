@@ -1,0 +1,3 @@
+agent:
+  system_prompt: |
+    You are helpful.

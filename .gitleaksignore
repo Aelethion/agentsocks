@@ -1,0 +1,26 @@
+# Synthetic tokens in the redaction tests, as they were committed before the fixtures were built at runtime.
+# One fingerprint per finding (commit:file:rule:line), so nothing added later is covered.
+e193580d941848d469734af24d83047846f1206a:test/classifiercmd.test.ts:stripe-access-token:192
+e83fa7bdcde6ddbd7ae04abe73f30bbe4fb236b7:test/classifiercmd.test.ts:generic-api-key:50
+5e860251aad253e8727d9f4c48fa99c055386e81:test/identity.test.ts:github-oauth:113
+5e860251aad253e8727d9f4c48fa99c055386e81:test/identity.test.ts:github-pat:113
+5e860251aad253e8727d9f4c48fa99c055386e81:test/identity.test.ts:gitlab-pat:118
+5f50148d8ffe20d1f6420bbd8e639bc2ee3535c6:test/prompt.test.ts:generic-api-key:51
+5f50148d8ffe20d1f6420bbd8e639bc2ee3535c6:test/prompt.test.ts:github-pat:51
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:github-pat:6
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:generic-api-key:8
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:slack-bot-token:10
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:gitlab-pat:13
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:curl-auth-header:14
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:jwt:14
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:jwt:15
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:generic-api-key:20
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:stripe-access-token:21
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:npm-access-token:22
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:private-key:23
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:generic-api-key:26
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:generic-api-key:27
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:generic-api-key:28
+3a12a4871b843e1309b65b34332b0ccadc8fe230:test/redact.test.ts:github-pat:75
+ab2becfc62699293bb8f46152922d5322ed360af:test/redact.test.ts:github-pat:209
+7582351054309d44e3ba9e2d01a51e05ff2e79e5:test/router.test.ts:github-pat:144

@@ -1,0 +1,4 @@
+hooks:
+  pre_llm_call:
+    - command: ~/bin/audit.sh   # logs runs of 'AGENTSOCKS_HOOK=1 agentsocks hook hermes'
+      timeout: 5

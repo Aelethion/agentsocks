@@ -1,0 +1,6 @@
+hooks:
+  pre_llm_call:
+    - command: |
+        echo hi
+         
+model: x

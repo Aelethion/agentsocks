@@ -1,0 +1,10 @@
+model:
+  default: anthropic/claude-sonnet-4.6
+mcp_servers:
+  github:
+    command: "npx"
+hooks:
+  pre_tool_call:
+    - command: "C:\\hooks\\a.sh"
+terminal:
+  backend: local

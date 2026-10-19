@@ -1,0 +1,57 @@
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import "./support.ts";
+import { Broker } from "../src/broker.ts";
+
+const broker = new Broker({ wakeEnabled: false, ttyScan: () => [] });
+const id = (n: number) => `0199eeee-0000-7000-8000-${String(n).padStart(12, "0")}`;
+const USER = id(1);
+const SPAWN = id(2);
+const FRESH = id(3);
+
+before(async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  mkdirSync(process.env.CODEX_HOME!, { recursive: true });
+  const db = new DatabaseSync(join(process.env.CODEX_HOME!, "state_5.sqlite"));
+  db.exec(
+    "CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, cwd TEXT, approval_mode TEXT, updated_at_ms INTEGER, archived INTEGER NOT NULL DEFAULT 0, archived_at INTEGER, source TEXT NOT NULL, thread_source TEXT, first_user_message TEXT NOT NULL DEFAULT '')",
+  );
+  const insert = db.prepare("INSERT INTO threads (id, name, cwd, approval_mode, updated_at_ms, source, thread_source, first_user_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  insert.run(USER, "user", "/work/state-db", "never", Date.now(), "cli", "user", "x");
+  insert.run(SPAWN, "spawn", "/work/state-db", "never", Date.now(), "cli", "subagent", "x");
+  insert.run(FRESH, "fresh", "/work/fresh", "never", Date.now(), "cli", "user", "x");
+  db.close();
+  await broker.start();
+});
+
+after(() => broker.stop());
+
+test("a thread registered before the subagent flag existed keeps the permission mode and cwd its hook supplied", async () => {
+  await broker.hook({ threadId: USER, event: "SessionStart", cwd: "/work/hook", permissionMode: "default" });
+  assert.equal(broker.store.getThread(USER)!.mode, "prompting");
+  broker.store.updateThread(USER, { subagent: null });
+  await broker.register(USER, {});
+  const row = broker.store.getThread(USER)!;
+  assert.equal(row.mode, "prompting", "the state DB's approval_mode is 'never', which would read as bypass");
+  assert.equal(row.cwd, "/work/hook");
+  assert.equal(row.subagent, 0, "the null flag is still filled in");
+});
+
+test("the null flag of a thread that has a mode is still looked up, and a subagent is found", async () => {
+  await broker.hook({ threadId: SPAWN, event: "SessionStart", permissionMode: "default" });
+  broker.store.updateThread(SPAWN, { subagent: null });
+  await broker.register(SPAWN, {});
+  const row = broker.store.getThread(SPAWN)!;
+  assert.equal(row.subagent, 1);
+  assert.equal(row.mode, "prompting");
+});
+
+test("a thread with no mode still takes its mode and cwd from the state DB", async () => {
+  await broker.register(FRESH, {});
+  const row = broker.store.getThread(FRESH)!;
+  assert.equal(row.mode, "bypass");
+  assert.equal(row.cwd, "/work/fresh");
+  assert.equal(row.subagent, 0);
+});

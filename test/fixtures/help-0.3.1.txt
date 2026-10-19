@@ -1,0 +1,28 @@
+  agentsocks list [--json] [--all]       Live Claude and Codex sessions
+  agentsocks send [--urgency urgent|normal|fyi] <to> <message...>
+                                         Send a message ("-" reads the message from stdin)
+  agentsocks inbox [--thread <id>]       Read a Codex thread's queued messages (also releases its held digests)
+  agentsocks tasks [T-xxxxxx] [--created|--assigned] [--all] [--json]
+                                         Your active tasks, from inside a session (--all includes finished ones)
+  agentsocks status                      Broker health
+  agentsocks status <msg-id|peer>        What happened to a message you sent or received, or what a session
+                                         is doing (your own name works too)
+  agentsocks stats [<peer>] [--json]     Routing metrics per destination
+  agentsocks classifier [--json]         Smart routing: the classifier in effect (alias: config)
+  agentsocks classifier jev [--key - | --key-file <path>]
+                                         Hosted TypeSafe Jev (off until turned on); "--key-file" reads a KEY=VALUE file, "--key -" reads the key from stdin and stores it (mode 600)
+  agentsocks classifier local <url> [--backend systemone|gliner2] [--allow-remote]
+                                         A model on your own hardware (Laya, or GLiNER2 from contrib/); a host
+                                         that is not this machine needs --allow-remote and https
+  agentsocks classifier off              Rules only
+  agentsocks eval-router [--backend none|config] [--file <cases.json>] [--json]
+                                         Score the router on the labelled set against the no-classifier baseline
+  agentsocks whoami                      How this process is identified
+  agentsocks doctor                      Check the installation
+  agentsocks install [--claude] [--codex] [--codex-hooks] [--no-trust-hooks] [--dry-run]
+                                         Register with Claude Code and Codex (default: all); stops an older
+                                         running broker so the next command starts this one
+  agentsocks uninstall [--dry-run]       Remove the registrations (backups are kept)
+  agentsocks mcp --host claude|codex     Run the MCP server (used by the agents)
+  agentsocks hook codex                  Codex hook entry point (used by Codex)
+  agentsocks daemon                      Run the broker in the foreground

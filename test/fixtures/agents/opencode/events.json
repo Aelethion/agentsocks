@@ -1,0 +1,30 @@
+{
+  "sessionCreatedRoot": {
+    "type": "session.created",
+    "properties": { "info": { "id": "ses_root0001", "projectID": "proj_1", "directory": "/work/api", "title": "New session", "version": "1.18.31", "time": { "created": 1760000000000, "updated": 1760000000000 } } }
+  },
+  "sessionCreatedChild": {
+    "type": "session.created",
+    "properties": { "info": { "id": "ses_child001", "projectID": "proj_1", "directory": "/work/api", "parentID": "ses_root0001", "title": "Explore the repo (@explore subagent)", "version": "1.18.31", "time": { "created": 1760000001000, "updated": 1760000001000 } } }
+  },
+  "sessionDeletedRoot": {
+    "type": "session.deleted",
+    "properties": { "info": { "id": "ses_root0001", "projectID": "proj_1", "directory": "/work/api", "title": "New session", "version": "1.18.31", "time": { "created": 1760000000000, "updated": 1760000009000 } } }
+  },
+  "statusBusy": { "type": "session.status", "properties": { "sessionID": "ses_root0001", "status": { "type": "busy" } } },
+  "statusRetry": { "type": "session.status", "properties": { "sessionID": "ses_root0001", "status": { "type": "retry", "attempt": 1, "message": "rate limited", "next": 1760000005000 } } },
+  "statusIdle": { "type": "session.status", "properties": { "sessionID": "ses_root0001", "status": { "type": "idle" } } },
+  "sessionIdle": { "type": "session.idle", "properties": { "sessionID": "ses_root0001" } },
+  "childBusy": { "type": "session.status", "properties": { "sessionID": "ses_child001", "status": { "type": "busy" } } },
+  "childIdle": { "type": "session.idle", "properties": { "sessionID": "ses_child001" } },
+  "chatMessageInput": { "sessionID": "ses_root0001", "agent": "plan", "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-5" }, "messageID": "msg_1" },
+  "chatMessageOutput": {
+    "message": { "id": "msg_1", "sessionID": "ses_root0001", "role": "user", "time": { "created": 1760000002000 }, "agent": "plan", "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-5" } },
+    "parts": [
+      { "id": "prt_0", "sessionID": "ses_root0001", "messageID": "msg_1", "type": "text", "text": "(synthetic context)", "synthetic": true },
+      { "id": "prt_1", "sessionID": "ses_root0001", "messageID": "msg_1", "type": "text", "text": "fix the failing test in api/" }
+    ]
+  },
+  "toolAfterInput": { "tool": "bash", "sessionID": "ses_root0001", "callID": "call_1", "args": { "command": "ls" } },
+  "toolAfterOutput": { "title": "ls", "output": "README.md\nsrc\n", "metadata": {} }
+}

@@ -1,0 +1,23 @@
+model:
+  default: anthropic/claude-sonnet-4.6
+
+hooks:
+  pre_tool_call:
+    - matcher: "terminal"
+      command: "~/.hermes/agent-hooks/block-rm-rf.sh"
+      timeout: 5
+      fail_closed: true
+  pre_llm_call:
+  - command: "~/.hermes/agent-hooks/inject-cwd-context.sh"
+  post_tool_call: []
+  subagent_stop:
+    - command: "~/.hermes/agent-hooks/log-orchestration.sh"
+  outbound:
+    - name: ci-notify
+      url: https://ci.example.com/hermes-events
+      events: [on_session_end]
+
+hooks_auto_accept: false
+
+terminal:
+  backend: local

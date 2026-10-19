@@ -1,0 +1,6 @@
+model:
+  default: anthropic/claude-sonnet-4.6
+mcp_servers: {}   # none yet
+hooks: {}
+terminal:
+  backend: local

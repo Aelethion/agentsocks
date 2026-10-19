@@ -1,0 +1,15 @@
+{
+  "session_id": "7f3e9a52-4b1c-4d6e-9a38-0c2d5e8f1b64",
+  "transcript_path": "/home/dev/.gemini/tmp/5d1c7a0e/chats/session-2026-10-13T12-00-7f3e9a52.json",
+  "cwd": "/work/api-worker",
+  "hook_event_name": "BeforeTool",
+  "timestamp": "2026-10-13T12:00:07.000Z",
+  "tool_name": "mcp_agentsocks_send_message",
+  "tool_input": { "to": "lead", "message": "migration done, see /work/api-worker/NOTES.md", "urgency": "fyi" },
+  "mcp_context": {
+    "server_name": "agentsocks",
+    "tool_name": "send_message",
+    "command": "/usr/bin/node",
+    "args": ["/opt/agentsocks/dist/cli.js", "mcp", "--agent", "gemini"]
+  }
+}

@@ -1,0 +1,2 @@
+hooks:
+  pre_llm_call: [{command: "x.sh"}]

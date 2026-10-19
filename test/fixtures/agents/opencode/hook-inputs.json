@@ -1,0 +1,7 @@
+{
+  "SessionStart": { "session": "ses_2f3a9c4d1e", "cwd": "/work/api", "remote": "0123456789abcdef01234567" },
+  "UserPromptSubmit": { "session": "ses_2f3a9c4d1e", "remote": "0123456789abcdef01234567", "prompt": "fix the failing test in api/" },
+  "PostToolUse": { "session": "ses_2f3a9c4d1e", "remote": "0123456789abcdef01234567", "tool": "bash" },
+  "Stop": { "session": "ses_2f3a9c4d1e", "remote": "0123456789abcdef01234567" },
+  "SessionEnd": { "session": "ses_2f3a9c4d1e", "remote": "0123456789abcdef01234567" }
+}

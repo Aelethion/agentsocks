@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "pre_llm_call",
+  "tool_name": null,
+  "tool_input": null,
+  "session_id": "20261013_101500_ab12cd",
+  "cwd": "/work/api-worker",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261013_101500_ab12cd",
+    "turn_id": "turn_01",
+    "api_request_id": null,
+    "user_message": "Summarise the open pull requests.",
+    "conversation_history": [
+      {
+        "role": "user",
+        "content": "Summarise the open pull requests."
+      }
+    ],
+    "is_first_turn": true,
+    "model": "anthropic/claude-sonnet-4.6",
+    "platform": "cli",
+    "parent_session_id": null,
+    "sender_id": null
+  }
+}

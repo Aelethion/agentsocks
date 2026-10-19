@@ -1,0 +1,5 @@
+# Hermes config. Everything is optional.
+# model: anthropic/claude-sonnet-4.6
+
+# terminal:
+#   backend: local

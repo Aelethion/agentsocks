@@ -1,0 +1,1966 @@
+{
+  "master": [
+    {
+      "type": "table",
+      "name": "threads",
+      "tbl_name": "threads",
+      "sql": "CREATE TABLE threads (\n        thread_id TEXT PRIMARY KEY,\n        name TEXT NOT NULL,\n        cwd TEXT,\n        mode TEXT,\n        state TEXT NOT NULL DEFAULT 'unknown',\n        remote TEXT,\n        created_at INTEGER NOT NULL,\n        last_seen INTEGER NOT NULL,\n        pending_wake_at INTEGER,\n        wake_log TEXT NOT NULL DEFAULT '[]',\n        stop_streak INTEGER NOT NULL DEFAULT 0\n      , hooks_active INTEGER NOT NULL DEFAULT 0, current_task TEXT, last_tool TEXT, last_activity INTEGER, wake_hold_since INTEGER, exempt_wake_log TEXT NOT NULL DEFAULT '[]', subagent INTEGER, agent TEXT NOT NULL DEFAULT 'codex', driver_addr TEXT, driver_name TEXT, name_explicit INTEGER, driver_sid TEXT, driver_instructed_at INTEGER)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_threads_1",
+      "tbl_name": "threads",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "messages",
+      "tbl_name": "messages",
+      "sql": "CREATE TABLE messages (\n        id TEXT PRIMARY KEY,\n        to_thread TEXT NOT NULL,\n        kind TEXT NOT NULL,\n        from_addr TEXT,\n        from_name TEXT,\n        from_kind TEXT,\n        from_session TEXT,\n        from_mode TEXT,\n        body TEXT NOT NULL,\n        received_at INTEGER NOT NULL,\n        state TEXT NOT NULL DEFAULT 'queued',\n        surfaced_at INTEGER\n      , msg_id TEXT, stop_blocked INTEGER NOT NULL DEFAULT 0, wakes INTEGER NOT NULL DEFAULT 0, route TEXT NOT NULL DEFAULT 'now', decision TEXT, body_hash TEXT, released_at INTEGER)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_messages_1",
+      "tbl_name": "messages",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "messages_inbox",
+      "tbl_name": "messages",
+      "sql": "CREATE INDEX messages_inbox ON messages (to_thread, state, received_at)"
+    },
+    {
+      "type": "index",
+      "name": "messages_msgid",
+      "tbl_name": "messages",
+      "sql": "CREATE INDEX messages_msgid ON messages (to_thread, msg_id)"
+    },
+    {
+      "type": "table",
+      "name": "outbox",
+      "tbl_name": "outbox",
+      "sql": "CREATE TABLE outbox (\n        id TEXT PRIMARY KEY,\n        msg_id TEXT NOT NULL,\n        from_addr TEXT,\n        from_name TEXT NOT NULL,\n        from_kind TEXT NOT NULL,\n        from_session TEXT,\n        from_mode TEXT,\n        to_addr TEXT NOT NULL,\n        to_name TEXT NOT NULL,\n        to_kind TEXT NOT NULL,\n        to_thread TEXT,\n        to_session TEXT,\n        body TEXT NOT NULL,\n        urgency TEXT NOT NULL,\n        route TEXT NOT NULL,\n        decision TEXT NOT NULL,\n        status TEXT NOT NULL,\n        task_id TEXT,\n        carrier_id TEXT,\n        created_at INTEGER NOT NULL,\n        sent_at INTEGER,\n        shown_at INTEGER,\n        replied_at INTEGER,\n        error TEXT\n      , body_hash TEXT, body_chars INTEGER)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_outbox_1",
+      "tbl_name": "outbox",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "outbox_to",
+      "tbl_name": "outbox",
+      "sql": "CREATE INDEX outbox_to ON outbox (to_addr, created_at)"
+    },
+    {
+      "type": "index",
+      "name": "outbox_pair",
+      "tbl_name": "outbox",
+      "sql": "CREATE INDEX outbox_pair ON outbox (from_addr, to_addr, created_at)"
+    },
+    {
+      "type": "index",
+      "name": "outbox_msgid",
+      "tbl_name": "outbox",
+      "sql": "CREATE INDEX outbox_msgid ON outbox (msg_id)"
+    },
+    {
+      "type": "index",
+      "name": "outbox_status",
+      "tbl_name": "outbox",
+      "sql": "CREATE INDEX outbox_status ON outbox (status, created_at)"
+    },
+    {
+      "type": "table",
+      "name": "tasks",
+      "tbl_name": "tasks",
+      "sql": "CREATE TABLE tasks (\n        id TEXT PRIMARY KEY,\n        from_addr TEXT NOT NULL,\n        from_name TEXT NOT NULL,\n        to_addr TEXT NOT NULL,\n        to_name TEXT NOT NULL,\n        to_kind TEXT NOT NULL,\n        title TEXT NOT NULL,\n        body TEXT NOT NULL,\n        acceptance TEXT,\n        risk TEXT NOT NULL,\n        external_ref TEXT,\n        on_behalf_of TEXT,\n        status TEXT NOT NULL,\n        result TEXT,\n        evidence TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        expires_at INTEGER NOT NULL\n      , from_session TEXT, to_session TEXT, request_id TEXT)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_tasks_1",
+      "tbl_name": "tasks",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "tasks_assignee",
+      "tbl_name": "tasks",
+      "sql": "CREATE INDEX tasks_assignee ON tasks (to_addr, status)"
+    },
+    {
+      "type": "index",
+      "name": "tasks_creator",
+      "tbl_name": "tasks",
+      "sql": "CREATE INDEX tasks_creator ON tasks (from_addr, status)"
+    },
+    {
+      "type": "index",
+      "name": "tasks_request",
+      "tbl_name": "tasks",
+      "sql": "CREATE UNIQUE INDEX tasks_request ON tasks (request_id) WHERE request_id IS NOT NULL"
+    },
+    {
+      "type": "table",
+      "name": "channel_members",
+      "tbl_name": "channel_members",
+      "sql": "CREATE TABLE channel_members (\n    channel TEXT NOT NULL,\n    member TEXT NOT NULL,\n    addr TEXT NOT NULL,\n    name TEXT NOT NULL,\n    kind TEXT NOT NULL,\n    session TEXT,\n    subscribed_at INTEGER NOT NULL,\n    last_seen INTEGER NOT NULL,\n    PRIMARY KEY (channel, member)\n  )"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_channel_members_1",
+      "tbl_name": "channel_members",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "asks",
+      "tbl_name": "asks",
+      "sql": "CREATE TABLE asks (\n    id TEXT PRIMARY KEY,\n    from_addr TEXT,\n    from_name TEXT NOT NULL,\n    from_kind TEXT NOT NULL,\n    from_session TEXT,\n    question TEXT NOT NULL,\n    pick TEXT,\n    status TEXT NOT NULL,\n    created_at INTEGER NOT NULL,\n    expires_at INTEGER NOT NULL,\n    closed_at INTEGER,\n    pick_result TEXT\n  )"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_asks_1",
+      "tbl_name": "asks",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "ask_targets",
+      "tbl_name": "ask_targets",
+      "sql": "CREATE TABLE ask_targets (\n    ask_id TEXT NOT NULL,\n    ord INTEGER NOT NULL,\n    addr TEXT NOT NULL,\n    name TEXT NOT NULL,\n    kind TEXT NOT NULL,\n    session TEXT,\n    state TEXT NOT NULL,\n    note TEXT,\n    msg_id TEXT,\n    route TEXT,\n    answer TEXT,\n    answered_at INTEGER,\n    PRIMARY KEY (ask_id, ord)\n  )"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_ask_targets_1",
+      "tbl_name": "ask_targets",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "asks_created",
+      "tbl_name": "asks",
+      "sql": "CREATE INDEX asks_created ON asks (created_at)"
+    },
+    {
+      "type": "table",
+      "name": "labels",
+      "tbl_name": "labels",
+      "sql": "CREATE TABLE labels (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    msg_id TEXT NOT NULL,\n    source TEXT NOT NULL,\n    rating TEXT NOT NULL,\n    reason TEXT NOT NULL,\n    created_at INTEGER NOT NULL,\n    msg_at INTEGER NOT NULL,\n    receiver_addr TEXT NOT NULL,\n    receiver_name TEXT,\n    receiver_kind TEXT NOT NULL,\n    sender_key TEXT NOT NULL,\n    sender_name TEXT,\n    sender_kind TEXT,\n    urgency TEXT,\n    route TEXT NOT NULL,\n    decided_by TEXT,\n    rule TEXT,\n    confidence REAL,\n    task TEXT,\n    last_tool TEXT,\n    body TEXT,\n    UNIQUE (msg_id, receiver_addr, source)\n  )"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_labels_1",
+      "tbl_name": "labels",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "sqlite_sequence",
+      "tbl_name": "sqlite_sequence",
+      "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+    },
+    {
+      "type": "index",
+      "name": "labels_sender",
+      "tbl_name": "labels",
+      "sql": "CREATE INDEX labels_sender ON labels (sender_key, route, msg_at)"
+    },
+    {
+      "type": "index",
+      "name": "messages_received",
+      "tbl_name": "messages",
+      "sql": "CREATE INDEX messages_received ON messages (received_at)"
+    },
+    {
+      "type": "table",
+      "name": "gateway_settings",
+      "tbl_name": "gateway_settings",
+      "sql": "CREATE TABLE gateway_settings (\n  key TEXT PRIMARY KEY,\n  value TEXT NOT NULL\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_settings_1",
+      "tbl_name": "gateway_settings",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_peers",
+      "tbl_name": "gateway_peers",
+      "sql": "CREATE TABLE gateway_peers (\n  id TEXT PRIMARY KEY,\n  thread_id TEXT NOT NULL UNIQUE,\n  name TEXT NOT NULL,\n  via TEXT NOT NULL,\n  machine TEXT,\n  login TEXT,\n  may_message TEXT NOT NULL DEFAULT '[]',\n  detail TEXT NOT NULL DEFAULT '{}',\n  created_at INTEGER NOT NULL,\n  last_seen INTEGER,\n  disabled INTEGER NOT NULL DEFAULT 0\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_peers_1",
+      "tbl_name": "gateway_peers",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_peers_2",
+      "tbl_name": "gateway_peers",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_tokens",
+      "tbl_name": "gateway_tokens",
+      "sql": "CREATE TABLE gateway_tokens (\n  id TEXT PRIMARY KEY,\n  peer_id TEXT NOT NULL,\n  label TEXT NOT NULL,\n  salt TEXT NOT NULL,\n  hash TEXT NOT NULL,\n  created_at INTEGER NOT NULL,\n  last_used_at INTEGER,\n  revoked_at INTEGER\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_tokens_1",
+      "tbl_name": "gateway_tokens",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_oauth_clients",
+      "tbl_name": "gateway_oauth_clients",
+      "sql": "CREATE TABLE gateway_oauth_clients (\n  client_id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  redirect_uris TEXT NOT NULL,\n  created_at INTEGER NOT NULL\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_oauth_clients_1",
+      "tbl_name": "gateway_oauth_clients",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_oauth_codes",
+      "tbl_name": "gateway_oauth_codes",
+      "sql": "CREATE TABLE gateway_oauth_codes (\n  hash TEXT PRIMARY KEY,\n  client_id TEXT NOT NULL,\n  redirect_uri TEXT NOT NULL,\n  challenge TEXT NOT NULL,\n  peer_name TEXT NOT NULL,\n  may_message TEXT NOT NULL,\n  family TEXT NOT NULL,\n  expires_at INTEGER NOT NULL,\n  used_at INTEGER\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_oauth_codes_1",
+      "tbl_name": "gateway_oauth_codes",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_oauth_tokens",
+      "tbl_name": "gateway_oauth_tokens",
+      "sql": "CREATE TABLE gateway_oauth_tokens (\n  hash TEXT PRIMARY KEY,\n  kind TEXT NOT NULL,\n  peer_id TEXT NOT NULL,\n  client_id TEXT NOT NULL,\n  family TEXT NOT NULL,\n  expires_at INTEGER NOT NULL,\n  revoked_at INTEGER\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_oauth_tokens_1",
+      "tbl_name": "gateway_oauth_tokens",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_pairings",
+      "tbl_name": "gateway_pairings",
+      "sql": "CREATE TABLE gateway_pairings (\n  hash TEXT PRIMARY KEY,\n  peer_name TEXT NOT NULL,\n  may_message TEXT NOT NULL,\n  redirect_host TEXT,\n  expires_at INTEGER NOT NULL,\n  used_at INTEGER\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_pairings_1",
+      "tbl_name": "gateway_pairings",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_hosts",
+      "tbl_name": "gateway_hosts",
+      "sql": "CREATE TABLE gateway_hosts (\n  host TEXT PRIMARY KEY,\n  allowed INTEGER NOT NULL DEFAULT 0,\n  linked INTEGER NOT NULL DEFAULT 0,\n  url TEXT,\n  created_at INTEGER NOT NULL\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_hosts_1",
+      "tbl_name": "gateway_hosts",
+      "sql": null
+    },
+    {
+      "type": "table",
+      "name": "gateway_push",
+      "tbl_name": "gateway_push",
+      "sql": "CREATE TABLE gateway_push (\n  endpoint TEXT PRIMARY KEY,\n  peer_id TEXT NOT NULL,\n  p256dh TEXT NOT NULL,\n  auth TEXT NOT NULL,\n  created_at INTEGER NOT NULL\n)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_gateway_push_1",
+      "tbl_name": "gateway_push",
+      "sql": null
+    }
+  ],
+  "tables": {
+    "threads": [
+      {
+        "cid": 0,
+        "name": "thread_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "cwd",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "mode",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "state",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'unknown'",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "remote",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "last_seen",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "pending_wake_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "wake_log",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'[]'",
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "stop_streak",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "hooks_active",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "current_task",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "last_tool",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "last_activity",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "wake_hold_since",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "exempt_wake_log",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'[]'",
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "subagent",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "agent",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'codex'",
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "driver_addr",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "driver_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "name_explicit",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "driver_sid",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "driver_instructed_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "messages": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "to_thread",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "from_addr",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "from_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "from_kind",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "from_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "from_mode",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "received_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "state",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'queued'",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "surfaced_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "msg_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "stop_blocked",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "wakes",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "route",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'now'",
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "decision",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "body_hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "released_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "outbox": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "msg_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "from_addr",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "from_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "from_kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "from_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "from_mode",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "to_addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "to_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "to_kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "to_thread",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "to_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "urgency",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "route",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "decision",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "task_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "carrier_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "sent_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "shown_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "replied_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "error",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 24,
+        "name": "body_hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 25,
+        "name": "body_chars",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "tasks": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "from_addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "from_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "to_addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "to_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "to_kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "title",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "acceptance",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "risk",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "external_ref",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "on_behalf_of",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "result",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "evidence",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "updated_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "expires_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "from_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "to_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "request_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "channel_members": [
+      {
+        "cid": 0,
+        "name": "channel",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "member",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 2
+      },
+      {
+        "cid": 2,
+        "name": "addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "subscribed_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "last_seen",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "asks": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "from_addr",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "from_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "from_kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "from_session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "question",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "pick",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "expires_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "closed_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "pick_result",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "ask_targets": [
+      {
+        "cid": 0,
+        "name": "ask_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "ord",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 2
+      },
+      {
+        "cid": 2,
+        "name": "addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "session",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "state",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "note",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "msg_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "route",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "answer",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "answered_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "labels": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "msg_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "source",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "rating",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "reason",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "msg_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "receiver_addr",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "receiver_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "receiver_kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "sender_key",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "sender_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "sender_kind",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "urgency",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "route",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "decided_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "rule",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "confidence",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "task",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "last_tool",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "sqlite_sequence": [
+      {
+        "cid": 0,
+        "name": "name",
+        "type": "",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 1,
+        "name": "seq",
+        "type": "",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_settings": [
+      {
+        "cid": 0,
+        "name": "key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "value",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_peers": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "thread_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "via",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "machine",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "login",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "may_message",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'[]'",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "detail",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'{}'",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "last_seen",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "disabled",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      }
+    ],
+    "gateway_tokens": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "peer_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "label",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "salt",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "last_used_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "revoked_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_oauth_clients": [
+      {
+        "cid": 0,
+        "name": "client_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "redirect_uris",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_oauth_codes": [
+      {
+        "cid": 0,
+        "name": "hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "client_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "redirect_uri",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "challenge",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "peer_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "may_message",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "family",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "expires_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "used_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_oauth_tokens": [
+      {
+        "cid": 0,
+        "name": "hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "kind",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "peer_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "client_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "family",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "expires_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "revoked_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_pairings": [
+      {
+        "cid": 0,
+        "name": "hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "peer_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "may_message",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "redirect_host",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "expires_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "used_at",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_hosts": [
+      {
+        "cid": 0,
+        "name": "host",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "allowed",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "linked",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "gateway_push": [
+      {
+        "cid": 0,
+        "name": "endpoint",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "peer_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "p256dh",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "auth",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  "rows": {
+    "threads": [],
+    "messages": [],
+    "outbox": [],
+    "tasks": [],
+    "channel_members": [],
+    "asks": [],
+    "ask_targets": [],
+    "labels": [],
+    "sqlite_sequence": [],
+    "gateway_settings": [],
+    "gateway_peers": [],
+    "gateway_tokens": [],
+    "gateway_oauth_clients": [],
+    "gateway_oauth_codes": [],
+    "gateway_oauth_tokens": [],
+    "gateway_pairings": [],
+    "gateway_hosts": [],
+    "gateway_push": []
+  }
+}

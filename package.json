@@ -1,0 +1,54 @@
+{
+  "name": "agentsocks",
+  "version": "0.4.0",
+  "description": "Let Claude Code and Codex sessions on one machine message each other, through Claude Code's own cross-session inbox (cc-socks) and Codex's hooks, MCP and queue.",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "mcp",
+    "ai-agents",
+    "agent-messaging",
+    "cross-session",
+    "inter-agent",
+    "cli"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aelethion/agentsocks.git"
+  },
+  "homepage": "https://github.com/Aelethion/agentsocks#readme",
+  "bugs": {
+    "url": "https://github.com/Aelethion/agentsocks/issues"
+  },
+  "bin": {
+    "agentsocks": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "contrib",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "postbuild": "chmod +x dist/cli.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run clean && npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

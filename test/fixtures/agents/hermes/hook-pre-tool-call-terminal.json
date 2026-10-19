@@ -1,0 +1,16 @@
+{
+  "hook_event_name": "pre_tool_call",
+  "tool_name": "terminal",
+  "tool_input": {
+    "command": "git status"
+  },
+  "session_id": "20261013_101500_ab12cd",
+  "cwd": "/work/api-worker",
+  "profile": "default",
+  "extra": {
+    "task_id": "20261013_101500_ab12cd",
+    "tool_call_id": "call_9",
+    "turn_id": "turn_02",
+    "api_request_id": "req_4"
+  }
+}

@@ -1,0 +1,5 @@
+defaults: &d
+  pre_llm_call:
+    - command: ~/mine.sh
+hooks:
+  <<: *d

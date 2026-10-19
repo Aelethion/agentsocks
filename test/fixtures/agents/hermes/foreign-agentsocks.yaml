@@ -1,0 +1,4 @@
+mcp_servers:
+  agentsocks:
+    command: "/opt/mine/agentsocks-wrapper"
+    args: ["serve"]

@@ -1,0 +1,6 @@
+mcp_servers:
+  agentsocks:
+    command: /home/me/bin/agentsocks-wrapper.sh
+    args: ["mcp", "--agent", "hermes", "--extra", "flag"]
+    env:
+      MY_TOKEN: abc

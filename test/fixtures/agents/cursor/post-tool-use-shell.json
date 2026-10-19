@@ -1,0 +1,18 @@
+{
+  "conversation_id": "7c1e4b9a-52d3-4f0e-9a8b-3d6f2e1c0a45",
+  "generation_id": "b2f6a1d0-0c4e-4d7a-8f31-6a9e5c7d2b10",
+  "model": "claude-sonnet-5-5",
+  "model_id": "claude-sonnet-5-5",
+  "model_params": [{ "id": "thinking", "value": "false" }],
+  "cursor_version": "2026.09.23",
+  "workspace_roots": ["/work/payments-api"],
+  "user_email": "dev@example.com",
+  "transcript_path": null,
+  "hook_event_name": "postToolUse",
+  "tool_name": "Shell",
+  "tool_input": { "command": "npm test" },
+  "tool_output": "{\"exitCode\":0,\"stdout\":\"All tests passed\"}",
+  "tool_use_id": "call_02",
+  "cwd": "/work/payments-api/packages/core",
+  "duration": 5432
+}

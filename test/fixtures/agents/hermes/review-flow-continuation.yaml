@@ -1,0 +1,6 @@
+mcp_servers:
+  a:
+    env: {
+A: b
+}
+model: x

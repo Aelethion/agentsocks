@@ -1,0 +1,31 @@
+# ~/.hermes/config.yaml
+_config_version: 21
+
+model:
+  default: anthropic/claude-sonnet-4.6
+  provider: openrouter   # switch with `hermes model`
+
+agent:
+  max_turns: 90
+  verify_guidance: true
+  coding_instructions: |
+    Prefer small diffs.
+    # not a comment: part of the block scalar
+
+terminal:
+  backend: local
+  cwd: "."
+  timeout: 180
+
+display:
+  skin: default
+  show_reasoning: false
+  tool_progress: "all"
+
+toolsets:
+  - hermes-cli
+  - web
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true

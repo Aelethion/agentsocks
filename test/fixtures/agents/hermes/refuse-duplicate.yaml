@@ -1,0 +1,8 @@
+mcp_servers:
+  a:
+    command: x
+hooks:
+  pre_tool_call: []
+mcp_servers:
+  b:
+    command: y
