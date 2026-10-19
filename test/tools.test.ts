@@ -45,12 +45,12 @@ test("the read-only tools keep their readOnlyHint and the tools that change some
   assert.deepEqual(readOnly.sort(), ["list_channels", "list_peers", "list_tasks", "message_status", "peer_status"]);
 });
 
-test("no tool claims to be destructive or to reach the open world, so a client that gates tools on those hints still offers every one", () => {
-  for (const t of TOOLS) {
-    assert.notEqual(t.annotations?.destructiveHint, true, t.name);
-    assert.equal(t.annotations?.openWorldHint, false, t.name);
+test("a tool that changes something leaves the destructive and open-world hints unset, so Codex still asks before running it", () => {
+  for (const t of TOOLS.filter((t) => !t.annotations?.readOnlyHint)) {
+    const hints = t.annotations as Record<string, unknown> | undefined;
+    assert.equal(hints?.destructiveHint, undefined, t.name);
+    assert.equal(hints?.openWorldHint, undefined, t.name);
   }
-  assert.deepEqual(TOOLS.filter((t) => !t.annotations?.readOnlyHint && t.annotations?.destructiveHint !== false).map((t) => t.name), ["update_task"]);
   assert.deepEqual(TOOLS.filter((t) => t.annotations?.idempotentHint).map((t) => t.name).sort(), ["set_driver", "set_name", "subscribe", "unsubscribe"]);
 });
 

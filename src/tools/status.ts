@@ -11,7 +11,7 @@ export const statusTools = [
     description: "Show how a message you sent was routed (now, after the current step, batched or merged) and whether it was sent, shown to the receiver or answered.",
     inputSchema: { message_id: z.string().min(1).describe("The message id returned by send_message") },
     host: "both",
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true },
     handler: async ({ message_id }, ctx) => {
       try {
         const me = await ctx.identify();
@@ -27,7 +27,7 @@ export const statusTools = [
     description: "Show what another session is working on, what is waiting for it (unread messages, held digests, open tasks), when it last showed or answered a message, and any drift between the two.",
     inputSchema: { peer: z.string().min(1).describe("Session name or ref from list_peers") },
     host: "both",
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true },
     handler: async ({ peer }, ctx) => {
       try {
         const me = await ctx.identify();

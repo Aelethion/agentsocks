@@ -19,7 +19,7 @@ export interface Tool {
   description: string | Readonly<Record<Host, string>>;
   inputSchema: ZodRawShape;
   host: Host | "both";
-  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean };
+  annotations?: { readOnlyHint?: boolean; idempotentHint?: boolean };
   handler(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 }
 
