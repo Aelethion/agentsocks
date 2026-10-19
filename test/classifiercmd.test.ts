@@ -298,9 +298,9 @@ test("no hint in the classifier output asks for the key on the command line", as
   }
 });
 
-test("the two ways the README gives a key work as written, one from a file and one piped in with no trailing newline", () => {
+test("the two ways the guide gives a key work as written, one from a file and one piped in with no trailing newline", () => {
   const dir = sandbox();
-  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const readme = readFileSync(new URL("../docs/GUIDE.md", import.meta.url), "utf8");
   const block = readme.split("**Turn it on.**")[1]!.split("```")[1]!;
   const commands = block.split("\n").filter((line) => line.startsWith("agentsocks ") || line.startsWith("printf "));
   assert.equal(commands.length, 2, block);

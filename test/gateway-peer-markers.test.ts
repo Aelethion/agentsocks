@@ -92,8 +92,8 @@ test("revoking a token refuses it at once, and dropping its push subscriptions c
   assert.equal(subscriptionsOf(state, "token:other").length, 1);
 });
 
-test("the README and SECURITY say the in-agent refusal is an anti-accident guard, not a security boundary", () => {
-  for (const name of ["README.md", "SECURITY.md"]) {
+test("the guide and SECURITY say the in-agent refusal is an anti-accident guard, not a security boundary", () => {
+  for (const name of ["docs/GUIDE.md", "SECURITY.md"]) {
     const text = doc(name);
     assert.match(text, /not a security boundary/, `${name} says plainly what the refusal is not`);
     assert.match(text, /accident/, `${name} says what the refusal guards against`);
@@ -101,7 +101,7 @@ test("the README and SECURITY say the in-agent refusal is an anti-accident guard
 });
 
 test("the docs say gateway status shows the source-check verdict and each node's may-message list", () => {
-  assert.match(doc("README.md"), /source-check verdict/, "README documents the verdict in gateway status");
+  assert.match(doc("docs/GUIDE.md"), /source-check verdict/, "the guide documents the verdict in gateway status");
   assert.match(doc("docs/SPEC.md"), /source-check verdict/, "SPEC records the verdict in gateway status");
 });
 
