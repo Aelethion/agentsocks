@@ -1,5 +1,6 @@
 import { agentReports, install as installAgentsocks, stopRunningBroker, uninstall as uninstallAgentsocks, uninstallGatewayState } from "../install.ts";
 import { AGENT_IDS, type InboxAgentId } from "../agents/types.ts";
+import { showBanner } from "../banner.ts";
 import { flag } from "./args.ts";
 import type { Handler } from "./types.ts";
 
@@ -12,6 +13,7 @@ export const install: Handler = async (args) => {
   const agents = INBOX_AGENTS.filter((id) => flag(args, `--${id}`));
   const claudeListAgents = flag(args, "--claude-listagents");
   if (args.length > 0) throw new Error(`install does not take ${args.join(" ")}; see agentsocks help`);
+  await showBanner();
   const all = !picks.claude && !picks.codex && !picks.hooks && agents.length === 0 && !claudeListAgents;
   const lines = await installAgentsocks({
     claude: all || picks.claude,

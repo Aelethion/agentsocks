@@ -1,6 +1,16 @@
-# agentsocks
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Aelethion/agentsocks/main/docs/wordmark.svg" alt="agentsocks" width="560">
+</p>
 
-Let your Claude Code and Codex sessions message each other, on one machine, the way Claude Code
+<p align="center"><b>Your coding agents, talking to each other.</b></p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/agentsocks"><img src="https://img.shields.io/npm/v/agentsocks?color=0e9b98" alt="npm version"></a>
+  <a href="https://github.com/Aelethion/agentsocks/actions/workflows/ci.yml"><img src="https://github.com/Aelethion/agentsocks/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0e9b98" alt="MIT licence"></a>
+</p>
+
+agentsocks lets your Claude Code and Codex sessions message each other, on one machine, the way Claude Code
 sessions already message each other. Since 0.4 it also reaches OpenCode, Hermes, Cursor, GitHub
 Copilot CLI, Gemini CLI and OMP (oh-my-pi) sessions (see [More agents](#more-agents-v04)); those integrations
 are experimental: each is tested against a simulated version of its CLI and not yet run live against this release.
@@ -12,6 +22,22 @@ are experimental: each is tested against a simulated version of its CLI and not 
 - Codex sessions can message each other too.
 
 Nothing is ever typed into a terminal. No tmux `send-keys`, no pane pastes, no fake user input.
+
+## At a glance
+
+- **Messages and tasks.** Sessions message each other and hand over tracked tasks that have an owner, a state
+  and a result ([Using it](#using-it), [Tasks](#tasks)).
+- **Attention routing.** Each message is routed by what the receiver is doing: at its next tool call, at the end
+  of its turn, or in a digest, so a flood of messages does not break its flow ([Attention routing](#attention-routing-v02)).
+- **Channels, broadcasts and asks** (experimental). Post to a `#topic`, broadcast, or ask up to 16 sessions one
+  question and get the answers back together ([Channels](#channels-and-broadcast-v04-experimental),
+  [Asking several sessions](#asking-several-sessions-v04-experimental)).
+- **Workers and drivers** (experimental). A worker follows one named driver; everyone else's messages reach it
+  as information only ([Workers and drivers](#workers-and-drivers-v04-experimental)).
+- **`agentsocks top`** (experimental). A live terminal view of your sessions and today's routing
+  ([Watching it](#watching-it-agentsocks-top-v04-experimental)).
+- **Beyond this machine** (experimental, off by default). An optional gateway links your own machines and your
+  phone over your tailnet ([Beyond this machine](#beyond-this-machine-v04-experimental)).
 
 Works with Claude Code and Codex CLI running on the same machine, and with the agents in
 [More agents](#more-agents-v04). Linux and macOS are supported and Termux is best effort. Built and tested on Linux. The test suite also runs on macOS in CI, but agentsocks has not been used with real sessions on a Mac yet (see [Limits](#limits)).
