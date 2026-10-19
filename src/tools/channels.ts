@@ -10,8 +10,9 @@ export const channelTools = [
   defineTool({
     name: "subscribe",
     title: "Subscribe to a channel",
+    annotations: { idempotentHint: true },
     description:
-      'Join a channel such as "#deploys" so messages other sessions post to it reach you. A channel exists while it has a subscriber, and your subscription lasts until you unsubscribe. Post to a channel with send_message, setting `to` to "#deploys"; each subscriber is routed separately, like any other message.',
+      'Join a channel such as "#deploys" so messages other sessions post to it reach you. Subscribing again does no harm, a session holds at most 32 channels, and the result lists its subscribers. A channel exists while it has a subscriber; your subscription lasts until you unsubscribe or your session has not been alive for 30 days. Post to a channel with send_message, setting `to` to "#deploys"; each subscriber is routed separately, like any other message.',
     inputSchema: { channel },
     host: "both",
     handler: async ({ channel }, ctx) => {
@@ -25,7 +26,8 @@ export const channelTools = [
   defineTool({
     name: "unsubscribe",
     title: "Leave a channel",
-    description: "Stop receiving messages posted to a channel. It does nothing if you were not subscribed.",
+    annotations: { idempotentHint: true },
+    description: "Leave a channel you joined with subscribe, so posts to it stop reaching you. It changes only your own subscription, says how many subscribers are left, and does nothing if you were not subscribed. Subscribe again to rejoin.",
     inputSchema: { channel },
     host: "both",
     handler: async ({ channel }, ctx) => {
@@ -39,7 +41,7 @@ export const channelTools = [
   defineTool({
     name: "list_channels",
     title: "List channels",
-    description: "List the channels that have subscribers, with who is subscribed, which of them are not running, and which one is you.",
+    description: "List the channels that have subscribers, with who is subscribed, which of them are not running, and which one is you. Use it to find a channel before you subscribe to it or post to it; list_peers lists sessions, not channels.",
     inputSchema: {},
     host: "both",
     annotations: { readOnlyHint: true },

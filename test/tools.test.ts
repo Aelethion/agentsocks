@@ -10,7 +10,7 @@ import type { Host, Tool } from "../src/tools/index.ts";
 import { tempDir } from "./tmp.ts";
 
 const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
-const shipped = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/tools/0.3.1.json", import.meta.url)), "utf8")) as Record<Host, { name: string }[]>;
+const shipped = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/tools/0.3.1.json", import.meta.url)), "utf8")) as Record<Host, { name: string; annotations?: Record<string, unknown> }[]>;
 
 const names = (list: readonly Tool[]): string[] => list.map((t) => t.name);
 
@@ -45,8 +45,17 @@ test("the read-only tools keep their readOnlyHint and the tools that change some
   assert.deepEqual(readOnly.sort(), ["list_channels", "list_peers", "list_tasks", "message_status", "peer_status"]);
 });
 
+test("a tool that changes something leaves the destructive and open-world hints unset, so Codex still asks before running it", () => {
+  for (const t of TOOLS.filter((t) => !t.annotations?.readOnlyHint)) {
+    const hints = t.annotations as Record<string, unknown> | undefined;
+    assert.equal(hints?.destructiveHint, undefined, t.name);
+    assert.equal(hints?.openWorldHint, undefined, t.name);
+  }
+  assert.deepEqual(TOOLS.filter((t) => t.annotations?.idempotentHint).map((t) => t.name).sort(), ["set_driver", "set_name", "subscribe", "unsubscribe"]);
+});
+
 for (const host of ["claude", "codex"] as const) {
-  test(`the ${host} host still lists every tool of 0.3.1 with the title, description, schema and annotations it had`, async () => {
+  test(`the ${host} host still lists every tool of 0.3.1 with the title, description and schema it had, and keeps every annotation it had`, async () => {
     const client = new Client({ name: `tools-${host}`, version: "0" });
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [cli, "mcp", "--host", host], cwd: tempDir("agentsocks-tools-"), env: { ...process.env } as Record<string, string> }));
     try {
@@ -55,7 +64,15 @@ for (const host of ["claude", "codex"] as const) {
         listed.slice(0, shipped[host].length).map((t) => t.name),
         shipped[host].map((t) => t.name),
       );
-      for (const want of shipped[host]) assert.deepEqual(listed.find((t) => t.name === want.name), want, want.name);
+      for (const t of listed.filter((t) => !t.annotations?.readOnlyHint)) {
+        assert.equal(t.annotations?.destructiveHint, undefined, `${t.name} leaves destructiveHint unset on the wire`);
+        assert.equal(t.annotations?.openWorldHint, undefined, `${t.name} leaves openWorldHint unset on the wire`);
+      }
+      for (const { annotations: had, ...want } of shipped[host]) {
+        const { annotations: has, ...now } = listed.find((t) => t.name === want.name)!;
+        assert.deepEqual(now, want, want.name);
+        assert.deepEqual({ ...has, ...had }, { ...has }, `${want.name} keeps its 0.3.1 annotations`);
+      }
     } finally {
       await client.close();
     }

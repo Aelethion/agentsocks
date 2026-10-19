@@ -44,6 +44,7 @@ export const inboxTools = [
   defineTool({
     name: "set_name",
     title: "Set this session's name",
+    annotations: { idempotentHint: true },
     description: "Set the name other sessions see for this Codex session (for example the project or role).",
     inputSchema: { name: z.string().min(1).max(64).describe("The name other sessions should use for this one, up to 64 characters") },
     host: "codex",
@@ -60,6 +61,7 @@ export const inboxTools = [
   defineTool({
     name: "set_driver",
     title: "Set this session's driver",
+    annotations: { idempotentHint: true },
     description: "Set the one session whose messages reach you as instructions; anyone else's arrive as information only. Pass \"none\" to clear it.",
     inputSchema: { peer: z.string().min(1).max(64).describe("The driving session by name or ref, or \"none\" to clear your driver") },
     host: "codex",
