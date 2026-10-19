@@ -10,9 +10,9 @@ const ART = [
   "      ▄▄▀",
 ];
 
-function capture(isTTY: boolean) {
+function capture(isTTY: boolean, columns?: number) {
   const chunks: string[] = [];
-  return { out: { isTTY, write: (chunk: string) => chunks.push(chunk) > 0 }, text: () => chunks.join("") };
+  return { out: { isTTY, ...(columns !== undefined && { columns }), write: (chunk: string) => chunks.push(chunk) > 0 }, text: () => chunks.join("") };
 }
 
 test("the install banner spells agentsocks as one lowercase word in block letters that fit an 80-column terminal", () => {
@@ -35,7 +35,7 @@ test("NO_COLOR and a dumb terminal get no color", () => {
   assert.equal(bannerColors({ TERM: "dumb" }), undefined);
 });
 
-test("the banner shows only to a person at a terminal: nothing when output is piped, when an agent runs install, or when framing is forced", async () => {
+test("the banner shows only to a person at a terminal: nothing when output is piped, when an agent runs install, when framing is forced, or in CI", async () => {
   const env = { COLORTERM: "truecolor", TERM: "xterm-256color" };
   const piped = capture(false);
   await showBanner({ out: piped.out, env, agent: () => false, wait: async () => {} });
@@ -46,17 +46,26 @@ test("the banner shows only to a person at a terminal: nothing when output is pi
   const forced = capture(true);
   await showBanner({ out: forced.out, env: { ...env, AGENTSOCKS_FRAME: "1" }, agent: () => false, wait: async () => {} });
   assert.equal(forced.text(), "");
+  const ci = capture(true);
+  await showBanner({ out: ci.out, env: { ...env, CI: "true" }, agent: () => false, wait: async () => {} });
+  assert.equal(ci.text(), "");
 });
 
-test("at a color terminal the wordmark sweeps in from the left in ten frames, ends whole, and the cursor comes back", async () => {
+test("a terminal narrower than the wordmark gets only the version line, so the art never wraps", async () => {
+  const narrow = capture(true, 40);
+  await showBanner({ out: narrow.out, env: { COLORTERM: "truecolor" }, agent: () => false, wait: async () => assert.fail("no sweep on a narrow terminal") });
+  assert.equal(narrow.text(), "  v0.4.0  messaging between your coding-agent sessions\n\n");
+});
+
+test("at a color terminal the wordmark sweeps in from the left in ten frames, ends whole, and never hides the cursor", async () => {
   const env = { COLORTERM: "truecolor", TERM: "xterm-256color" };
-  const tty = capture(true);
+  const tty = capture(true, 80);
   const waits: number[] = [];
   await showBanner({ out: tty.out, env, agent: () => false, wait: async (ms) => void waits.push(ms) });
   const text = tty.text();
   assert.equal(waits.length, 9);
   assert.equal(text.split("\x1b[4A").length - 1, 9, "each frame after the first redraws the same four rows");
-  assert.ok(text.indexOf("\x1b[?25l") < text.lastIndexOf("\x1b[?25h"), "the cursor is hidden while it draws and shown again after");
+  assert.ok(!text.includes("\x1b[?25l"), "Ctrl-C during the sweep can never leave the cursor hidden");
   const lastFrame = text.slice(text.lastIndexOf("\x1b[4A"));
   for (const line of wordmark(bannerColors(env))) assert.ok(lastFrame.includes(line), `the last frame holds ${JSON.stringify(line)}`);
   assert.match(text, /v0\.4\.0 {2}messaging between your coding-agent sessions/);

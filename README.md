@@ -23,12 +23,15 @@ are experimental: each is tested against a simulated version of its CLI and not 
 
 Nothing is ever typed into a terminal. No tmux `send-keys`, no pane pastes, no fake user input.
 
+Works with Claude Code and Codex CLI running on the same machine, and with the agents in
+[More agents](#more-agents-v04). Linux and macOS are supported and Termux is best effort. Built and tested on Linux. The test suite also runs on macOS in CI, but agentsocks has not been used with real sessions on a Mac yet (see [Limits](#limits)).
+
 ## At a glance
 
 - **Messages and tasks.** Sessions message each other and hand over tracked tasks that have an owner, a state
   and a result ([Using it](#using-it), [Tasks](#tasks)).
 - **Attention routing.** Each message is routed by what the receiver is doing: at its next tool call, at the end
-  of its turn, or in a digest, so a flood of messages does not break its flow ([Attention routing](#attention-routing-v02)).
+  of its turn, or in a digest, so a flood of messages is held back instead of interrupting it each time ([Attention routing](#attention-routing-v02)).
 - **Channels, broadcasts and asks** (experimental). Post to a `#topic`, broadcast, or ask up to 16 sessions one
   question and get the answers back together ([Channels](#channels-and-broadcast-v04-experimental),
   [Asking several sessions](#asking-several-sessions-v04-experimental)).
@@ -37,10 +40,8 @@ Nothing is ever typed into a terminal. No tmux `send-keys`, no pane pastes, no f
 - **`agentsocks top`** (experimental). A live terminal view of your sessions and today's routing
   ([Watching it](#watching-it-agentsocks-top-v04-experimental)).
 - **Beyond this machine** (experimental, off by default). An optional gateway links your own machines and your
-  phone over your tailnet ([Beyond this machine](#beyond-this-machine-v04-experimental)).
-
-Works with Claude Code and Codex CLI running on the same machine, and with the agents in
-[More agents](#more-agents-v04). Linux and macOS are supported and Termux is best effort. Built and tested on Linux. The test suite also runs on macOS in CI, but agentsocks has not been used with real sessions on a Mac yet (see [Limits](#limits)).
+  phone over your tailnet, and, only if you add one, a public listener for ChatGPT, Grok and token clients
+  ([Beyond this machine](#beyond-this-machine-v04-experimental)).
 
 ## Install
 

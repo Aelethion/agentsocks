@@ -24,7 +24,7 @@ export interface BannerColors {
 }
 
 export interface BannerOptions {
-  out?: { isTTY?: boolean; write(chunk: string): boolean };
+  out?: { isTTY?: boolean; columns?: number; write(chunk: string): boolean };
   env?: NodeJS.ProcessEnv;
   agent?: () => boolean;
   wait?: (ms: number) => Promise<void>;
@@ -48,23 +48,23 @@ export function wordmark(colors: BannerColors | undefined, columns = WIDTH): str
 export async function showBanner(opts: BannerOptions = {}): Promise<void> {
   const out = opts.out ?? process.stdout;
   const env = opts.env ?? process.env;
-  if (framesPeerText(!!out.isTTY, env, opts.agent)) return;
+  if (framesPeerText(!!out.isTTY, env, opts.agent) || env.CI) return;
   const tagline = `  v${VERSION}  messaging between your coding-agent sessions`;
+  if (out.columns !== undefined && out.columns < WIDTH) {
+    out.write(`${tagline}\n\n`);
+    return;
+  }
   const colors = bannerColors(env);
   if (!colors) {
     out.write(`\n${wordmark(undefined).join("\n")}\n${tagline}\n\n`);
     return;
   }
   const wait = opts.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  out.write("\n\x1b[?25l");
-  try {
-    for (let frame = 1; frame <= FRAMES; frame++) {
-      if (frame > 1) out.write(`\x1b[${AGENT.length}A`);
-      out.write(wordmark(colors, Math.ceil((WIDTH * frame) / FRAMES)).map((line) => `\r\x1b[2K${line}\n`).join(""));
-      if (frame < FRAMES) await wait(FRAME_MS);
-    }
-  } finally {
-    out.write("\x1b[?25h");
+  out.write("\n");
+  for (let frame = 1; frame <= FRAMES; frame++) {
+    if (frame > 1) out.write(`\x1b[${AGENT.length}A`);
+    out.write(wordmark(colors, Math.ceil((WIDTH * frame) / FRAMES)).map((line) => `\r\x1b[2K${line}\n`).join(""));
+    if (frame < FRAMES) await wait(FRAME_MS);
   }
   out.write(`\x1b[2m${tagline}${colors.reset}\n\n`);
 }
