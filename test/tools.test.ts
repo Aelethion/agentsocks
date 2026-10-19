@@ -10,7 +10,7 @@ import type { Host, Tool } from "../src/tools/index.ts";
 import { tempDir } from "./tmp.ts";
 
 const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
-const shipped = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/tools/0.3.1.json", import.meta.url)), "utf8")) as Record<Host, { name: string }[]>;
+const shipped = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/tools/0.3.1.json", import.meta.url)), "utf8")) as Record<Host, { name: string; annotations?: Record<string, unknown> }[]>;
 
 const names = (list: readonly Tool[]): string[] => list.map((t) => t.name);
 
@@ -45,8 +45,17 @@ test("the read-only tools keep their readOnlyHint and the tools that change some
   assert.deepEqual(readOnly.sort(), ["list_channels", "list_peers", "list_tasks", "message_status", "peer_status"]);
 });
 
+test("no tool claims to be destructive or to reach the open world, so a client that gates tools on those hints still offers every one", () => {
+  for (const t of TOOLS) {
+    assert.notEqual(t.annotations?.destructiveHint, true, t.name);
+    assert.equal(t.annotations?.openWorldHint, false, t.name);
+  }
+  assert.deepEqual(TOOLS.filter((t) => !t.annotations?.readOnlyHint && t.annotations?.destructiveHint !== false).map((t) => t.name), ["update_task"]);
+  assert.deepEqual(TOOLS.filter((t) => t.annotations?.idempotentHint).map((t) => t.name).sort(), ["set_driver", "set_name", "subscribe", "unsubscribe"]);
+});
+
 for (const host of ["claude", "codex"] as const) {
-  test(`the ${host} host still lists every tool of 0.3.1 with the title, description, schema and annotations it had`, async () => {
+  test(`the ${host} host still lists every tool of 0.3.1 with the title, description and schema it had, and keeps every annotation it had`, async () => {
     const client = new Client({ name: `tools-${host}`, version: "0" });
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [cli, "mcp", "--host", host], cwd: tempDir("agentsocks-tools-"), env: { ...process.env } as Record<string, string> }));
     try {
@@ -55,7 +64,11 @@ for (const host of ["claude", "codex"] as const) {
         listed.slice(0, shipped[host].length).map((t) => t.name),
         shipped[host].map((t) => t.name),
       );
-      for (const want of shipped[host]) assert.deepEqual(listed.find((t) => t.name === want.name), want, want.name);
+      for (const { annotations: had, ...want } of shipped[host]) {
+        const { annotations: has, ...now } = listed.find((t) => t.name === want.name)!;
+        assert.deepEqual(now, want, want.name);
+        assert.deepEqual({ ...has, ...had }, { ...has }, `${want.name} keeps its 0.3.1 annotations`);
+      }
     } finally {
       await client.close();
     }

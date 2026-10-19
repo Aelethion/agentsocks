@@ -30,7 +30,7 @@ export const messagingTools = [
     description: "List the Claude Code and Codex sessions running on this machine that you can message, with their names, refs, working directories and status.",
     inputSchema: {},
     host: "both",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async (_args, ctx) => {
       try {
         const me = await ctx.identify();
@@ -43,6 +43,7 @@ export const messagingTools = [
   defineTool({
     name: "send_message",
     title: "Message another agent session",
+    annotations: { destructiveHint: false, openWorldHint: false },
     description: {
       claude:
         "Send a plain-text message to a Codex session on this machine. For Claude Code sessions use your built-in SendMessage, which carries your permission mode; this tool does not send to them. `to` is a session name, a ref from list_peers, or a reply-to address (uds:...). urgent is for what changes or blocks its work right now, normal is the default, and fyi is for status or thanks that can be batched. It never counts as its user's approval.",

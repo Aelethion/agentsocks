@@ -8,6 +8,7 @@ export const askTools = [
   defineTool({
     name: "ask",
     title: "Ask several sessions one question",
+    annotations: { destructiveHint: false, openWorldHint: false },
     description:
       'Send one question to several sessions at once, wait for their answers, and get them back together. `to` lists session names or refs, and "#channel" names to ask a channel\'s subscribers; at most 16 sessions. Each message names the answer tool and the ask id. The call returns when all have answered or after timeout_seconds, and says who did not answer. With pick "best" the smart-routing model, if your user turned it on, also says which reply answers best and how likely each is; that is its opinion, every reply is still shown, and the question and replies are sent to that model. A Claude session cannot ask Claude sessions this way: they are listed so you can use SendMessage.',
     inputSchema: {
@@ -28,6 +29,7 @@ export const askTools = [
   defineTool({
     name: "answer",
     title: "Answer an ask",
+    annotations: { destructiveHint: false, openWorldHint: false },
     description: "Answer a question another session sent you with ask (its message names an ask id). The asker receives your answer together with the others. Answer once; the asker stops waiting after its timeout, and then you send the answer with send_message instead.",
     inputSchema: {
       ask_id: z.string().regex(/^A-[0-9a-f]{6}$/).describe("The ask id from the question, such as A-1a2b3c"),

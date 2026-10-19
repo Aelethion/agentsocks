@@ -17,6 +17,7 @@ export const taskTools = [
   defineTool({
     name: "send_task",
     title: "Hand another session a tracked task",
+    annotations: { destructiveHint: false, openWorldHint: false },
     description:
       "Give another agent session a task you will check on. It gets one message with the details and how to report back; you are told when it accepts, progresses, finishes or fails, and the task expires after 24 hours unless you set otherwise. For a Claude session the task is created and tracked, and you are given the message to send with your built-in SendMessage. Say what done looks like in acceptance_criteria. Use risk high only for work that must not wait.",
     inputSchema: {
@@ -53,6 +54,7 @@ export const taskTools = [
   defineTool({
     name: "update_task",
     title: "Update a task",
+    annotations: { openWorldHint: false },
     description:
       "Report progress on a task. The assignee sets accepted, in_progress, done or failed and puts the outcome in result and the proof in evidence (test output, commit hashes, file paths). Only the creator can set cancelled. The creator is told about every change.",
     inputSchema: {
@@ -81,7 +83,7 @@ export const taskTools = [
       include_finished: z.boolean().default(false).describe("Also show done, failed, cancelled and expired tasks"),
     },
     host: "both",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: false },
     handler: async ({ show, include_finished }, ctx) => {
       try {
         const me = await ctx.identify();
