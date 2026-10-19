@@ -117,8 +117,8 @@ test("an API peer reads its inbox through a function tool, answers with send_mes
   assert.match(second, /function_call_output/);
   assert.match(second, /PLUM-7/);
   assert.match(second, /from=\\?"@alpha/, "and the peer text arrives sender-bound inside the nonce-fenced framed block (G2)");
-  const unread = broker.store.db.prepare("SELECT COUNT(*) AS n FROM messages WHERE to_thread = (SELECT thread_id FROM gateway_peers WHERE id = 'api:grok') AND state IN ('queued','notified')").get() as { n: number };
-  assert.equal(unread.n, 0);
+  const unread = () => (broker.store.db.prepare("SELECT COUNT(*) AS n FROM messages WHERE to_thread = (SELECT thread_id FROM gateway_peers WHERE id = 'api:grok') AND state IN ('queued','notified')").get() as { n: number }).n;
+  await eventually(() => (unread() === 0 ? true : undefined), `the API peer's inbox still holds ${unread()} unread message(s)`);
 });
 
 test("when the model answers in plain text instead of calling send_message, the text goes back to the sender", async () => {
