@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Aelethion/agentsocks",
+  "title": "agentsocks",
+  "description": "Claude Code and Codex sessions message each other and share tracked tasks, one machine by default.",
+  "repository": {
+    "url": "https://github.com/Aelethion/agentsocks",
+    "source": "github"
+  },
+  "version": "0.4.0",
+  "websiteUrl": "https://github.com/Aelethion/agentsocks#readme",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "agentsocks",
+      "version": "0.4.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        },
+        {
+          "type": "named",
+          "name": "--host",
+          "description": "Which agent runs this server: claude for Claude Code, codex for Codex CLI.",
+          "default": "claude",
+          "choices": ["claude", "codex"],
+          "isRequired": true
+        }
+      ]
+    }
+  ]
+}

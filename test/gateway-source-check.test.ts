@@ -199,19 +199,25 @@ test("the global connection budget refuses the excess while polls hold it", asyn
     raw(pub, "/mcp", {
       method: "POST",
       headers: { ...MHD, authorization: `Bearer ${c.token}`, "x-forwarded-for": c.xff, ...close },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "wait_for_message", arguments: { timeout_seconds: 3 } } }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "wait_for_message", arguments: { timeout_seconds: 10 } } }),
     }).then((r) => r.status, () => -1);
-  const held = creds.map(poll);
-  await sleep(1500);
-  const got = await Promise.all(held.map((p) => Promise.race([p, "pending"])));
-  assert.equal(got.filter((s) => s === 503).length, 2, "exactly the two polls past the 128 budget are refused");
-  const extra = await raw(pub, "/mcp", {
-    method: "POST",
-    headers: { ...MHD, authorization: `Bearer ${creds[0]!.token}`, "x-forwarded-for": creds[0]!.xff, ...close },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "read_inbox", arguments: {} } }),
-  });
-  assert.equal(extra.status, 503, "a further request while the budget is held is refused");
-  await Promise.all(held);
+  const statuses: number[] = [];
+  const refused = () => statuses.filter((s) => s === 503).length;
+  const held = creds.map((c) => poll(c).then((s) => void statuses.push(s)));
+  try {
+    const end = Date.now() + 8000;
+    while (refused() < 2 && Date.now() < end) await sleep(50);
+    await sleep(300);
+    assert.equal(refused(), 2, "exactly the two polls past the 128 budget are refused");
+    const extra = await raw(pub, "/mcp", {
+      method: "POST",
+      headers: { ...MHD, authorization: `Bearer ${creds[0]!.token}`, "x-forwarded-for": creds[0]!.xff, ...close },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "read_inbox", arguments: {} } }),
+    });
+    assert.equal(extra.status, 503, "a further request while the budget is held is refused");
+  } finally {
+    await Promise.all(held);
+  }
 });
 
 test("a short request timeout spares polls but cuts stalled non-poll requests", async () => {
