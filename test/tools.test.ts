@@ -64,6 +64,10 @@ for (const host of ["claude", "codex"] as const) {
         listed.slice(0, shipped[host].length).map((t) => t.name),
         shipped[host].map((t) => t.name),
       );
+      for (const t of listed.filter((t) => !t.annotations?.readOnlyHint)) {
+        assert.equal(t.annotations?.destructiveHint, undefined, `${t.name} leaves destructiveHint unset on the wire`);
+        assert.equal(t.annotations?.openWorldHint, undefined, `${t.name} leaves openWorldHint unset on the wire`);
+      }
       for (const { annotations: had, ...want } of shipped[host]) {
         const { annotations: has, ...now } = listed.find((t) => t.name === want.name)!;
         assert.deepEqual(now, want, want.name);

@@ -12,7 +12,7 @@ export const channelTools = [
     title: "Subscribe to a channel",
     annotations: { idempotentHint: true },
     description:
-      'Join a channel such as "#deploys" so messages other sessions post to it reach you. Subscribing again does no harm, a session holds at most 32 channels, and the result lists who else is subscribed. A channel exists while it has a subscriber; your subscription lasts until you unsubscribe or your session has not been alive for 30 days. Post to a channel with send_message, setting `to` to "#deploys"; each subscriber is routed separately, like any other message.',
+      'Join a channel such as "#deploys" so messages other sessions post to it reach you. Subscribing again does no harm, a session holds at most 32 channels, and the result lists its subscribers. A channel exists while it has a subscriber; your subscription lasts until you unsubscribe or your session has not been alive for 30 days. Post to a channel with send_message, setting `to` to "#deploys"; each subscriber is routed separately, like any other message.',
     inputSchema: { channel },
     host: "both",
     handler: async ({ channel }, ctx) => {
