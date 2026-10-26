@@ -87,7 +87,7 @@ test("a session id becomes a thread id the agent's name prefixes, so two agents 
   assert.equal(threadIdFor("hermes", "20261013_101500_ab12cd"), "hermes_20261013_101500_ab12cd");
   assert.equal(threadIdFor("codex", "019e2f00-aaaa"), "019e2f00-aaaa");
   assert.notEqual(threadIdFor("cursor", "abc"), threadIdFor("gemini", "abc"));
-  for (const bad of ["", "a/b", "../x", "x".repeat(65), "a b", undefined, 7]) assert.equal(threadIdFor("cursor", bad), undefined, String(bad));
+  for (const bad of ["", "a/b", "../x", "x".repeat(80), "a b", undefined, 7]) assert.equal(threadIdFor("cursor", bad), undefined, String(bad));
 });
 
 test("a session that registers through an agent's hook is a thread of that agent, named after its folder, with no Codex lookup", async () => {

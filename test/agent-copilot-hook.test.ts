@@ -146,7 +146,7 @@ test("unknown events and malformed input print nothing and never throw", async (
     ["sessionStart", {}],
     ["sessionStart", { sessionId: "../x" }],
     ["sessionStart", { sessionId: 7 }],
-    ["sessionStart", { sessionId: "x".repeat(65) }],
+    ["sessionStart", { sessionId: "x".repeat(80) }],
     ["postToolUse", { toolName: "bash" }],
     ["agentStop", { sessionId: null }],
     ["sessionEnd", { sessionId: ["a"] }],

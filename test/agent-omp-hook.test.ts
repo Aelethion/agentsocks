@@ -115,7 +115,7 @@ test("an unknown event, a missing or unusable session id, or an input of the wro
     return {};
   };
   for (const event of ["Bogus", "constructor", "__proto__", ""]) assert.equal(await run(event, start(SESSION), spy), undefined, event);
-  for (const session of [undefined, null, 7, {}, [], "", "../x", "a b", "x".repeat(65)]) assert.equal(await run("SessionStart", { session }, spy), undefined, JSON.stringify(session));
+  for (const session of [undefined, null, 7, {}, [], "", "../x", "a b", "x".repeat(80)]) assert.equal(await run("SessionStart", { session }, spy), undefined, JSON.stringify(session));
   assert.equal(await run("PostToolUse", {}, spy), undefined);
   assert.deepEqual(calls, []);
 });

@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { lstatSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { until } from "./support.ts";
 import { Broker } from "../src/broker.ts";
@@ -9,13 +10,15 @@ import { AGENT_IDS, threadIdFor, type InboxAgentId } from "../src/agents/index.t
 import { agentIdentity, codexIdentity } from "../src/peers.ts";
 import { runtimeDirFor, threadSocketName, threadSocketPath, type SocketContext } from "../src/paths.ts";
 import { sendMessage } from "../src/send.ts";
+import { stampKeyPath, stampSession, verifyStamp } from "../src/stamp.ts";
 
 const LINUX_LIMIT = 107;
 const DARWIN_LIMIT = 103;
 const INBOX_AGENTS = AGENT_IDS.filter((a): a is InboxAgentId => a !== "codex");
-const LONGEST_RAW = `${"s".repeat(30)}-${"0123456789".repeat(4)}`.slice(0, 64);
+const LONGEST_RAW = `${"s".repeat(30)}-${"0123456789".repeat(4)}`.slice(0, 71);
 const LONGEST_ID = threadIdFor("opencode", LONGEST_RAW)!;
 const UUID = "019a5f2e-7c3b-7d11-9a42-0123456789ab";
+const HERMES_LOCAL = `local-${"0123456789abcdef".repeat(4)}`;
 
 const broker = new Broker({ wakeEnabled: false, ttyScan: () => [] });
 
@@ -31,11 +34,32 @@ function context(over: Partial<SocketContext>): SocketContext {
   return { platform: "linux", env: {}, uid: 1000, tmpdir: "/tmp", ...over };
 }
 
-test("the longest session id agentsocks accepts is 64 characters, so the longest thread id is 73", () => {
-  assert.equal(LONGEST_RAW.length, 64);
-  assert.equal(LONGEST_ID.length, 73);
-  assert.equal(threadIdFor("copilot", LONGEST_RAW)!.length, 72);
-  assert.equal(threadIdFor("opencode", `${LONGEST_RAW}x`), undefined);
+test("a session id is accepted while the thread id built from it fits 80 characters, so Hermes' local- ids of 70 characters work", () => {
+  assert.equal(HERMES_LOCAL.length, 70);
+  assert.equal(threadIdFor("hermes", HERMES_LOCAL), `hermes_${HERMES_LOCAL}`);
+  assert.equal(LONGEST_ID.length, 80);
+  for (const agent of INBOX_AGENTS) {
+    const room = 80 - agent.length - 1;
+    assert.equal(threadIdFor(agent, "s".repeat(room))?.length, 80, agent);
+    assert.equal(threadIdFor(agent, "s".repeat(room + 1)), undefined, agent);
+  }
+  assert.equal(threadIdFor("codex", "c".repeat(80)), "c".repeat(80));
+  assert.equal(threadIdFor("codex", "c".repeat(81)), undefined);
+});
+
+test("a long Hermes session id is stamped and its stamp verifies, and an id too long for a thread id is never stamped", () => {
+  assert.equal(verifyStamp("hermes", stampSession("hermes", HERMES_LOCAL)), HERMES_LOCAL);
+  assert.equal(verifyStamp("cursor", stampSession("hermes", HERMES_LOCAL)), undefined);
+  assert.doesNotThrow(() => stampSession("hermes", "s".repeat(73)));
+  assert.throws(() => stampSession("hermes", "s".repeat(74)), /not a session id agentsocks can stamp/);
+});
+
+test("a correctly signed stamp still does not verify when its session would make a thread id longer than 80 characters", () => {
+  stampSession("hermes", HERMES_LOCAL);
+  const key = Buffer.from(readFileSync(stampKeyPath(), "utf8").trim(), "hex");
+  const signed = (session: string) => `${session}.${createHmac("sha256", key).update(`agentsocks-stamp\0hermes\0${session}`).digest("hex").slice(0, 32)}`;
+  assert.equal(verifyStamp("hermes", signed("s".repeat(73))), "s".repeat(73));
+  assert.equal(verifyStamp("hermes", signed("s".repeat(74))), undefined);
 });
 
 test("a thread id of 36 characters or fewer keeps the socket name it has always had, and a longer one is hashed into a name that is the same every time and differs between ids", () => {
@@ -66,13 +90,13 @@ test("the socket of the longest thread id fits sun_path wherever a 36 character 
   fitsIn(context({ platform: "darwin", uid: 501, tmpdir: "/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T" }), DARWIN_LIMIT, "darwin, the real macOS tmpdir");
 });
 
-test("a session with a 64 character id registers for every agent, binds its socket under the test runtime directory, and receives a message sent to it by name", async () => {
+test("a session with the longest id its agent allows registers for every agent, binds its socket under the test runtime directory, and receives a message sent to it by name", async () => {
   const sender = await (async () => {
     await broker.hook({ threadId: "long-sender-1", event: "SessionStart", cwd: "/work/longsender" });
     return codexIdentity("long-sender-1");
   })();
   for (const agent of INBOX_AGENTS) {
-    const raw = `${agent}-${"k".repeat(64)}`.slice(0, 64);
+    const raw = `${agent}-${"k".repeat(80)}`.slice(0, 80 - agent.length - 1);
     const me = await agentIdentity(agent, raw, `/work/long-${agent}`);
     const threadId = threadIdFor(agent, raw)!;
     assert.equal(me.session, threadId);

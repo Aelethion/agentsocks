@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { isLocalUrl, readKeyFile } from "../../classifier.ts";
+import { THREAD_ID } from "../../limits.ts";
 import { agentsocksEnvPath, configPath, expandHome } from "../../paths.ts";
 import { VERSION } from "../../version.ts";
 import { isRecord } from "../files.ts";
@@ -126,14 +127,14 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
   });
 }
 
-const SESSION = /^hermes_([A-Za-z0-9_-]{1,64})$/;
+const SESSION = /^hermes_([A-Za-z0-9_-]+)$/;
 
 export const hermesWake = {
   canWake: (): boolean => wakeConfig().state === "on",
   wake: async ({ thread, line }: { thread: { thread_id: string }; line: string }): Promise<WakeOutcome> => {
     const config = wakeConfig();
     if (config.state !== "on") return { ok: false, detail: config.state === "off" ? "no Hermes API is configured" : config.why };
-    const session = SESSION.exec(thread.thread_id)?.[1];
+    const session = THREAD_ID.test(thread.thread_id) ? SESSION.exec(thread.thread_id)?.[1] : undefined;
     if (!session) return { ok: false, detail: "not a Hermes session id" };
     return sendWake(config, session, line);
   },

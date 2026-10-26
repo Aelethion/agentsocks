@@ -149,10 +149,16 @@ test("every agentsocks tool the MCP server offers is stamped", async () => {
   }
 });
 
+test("a Hermes local session id, local- and a 64-character hash, is stamped like any other", async () => {
+  const local = `local-${"0123456789abcdef".repeat(4)}`;
+  const out = await run("pre_tool_call", withSession("hook-pre-tool-call-read-inbox", local));
+  assert.match(out ?? "", new RegExp(`"_session":"${local}\\.[0-9a-f]{32}"`));
+});
+
 test("a tool call with no arguments still gets the stamp, and one with no usable session id gets nothing", async () => {
   const bare = await run("pre_tool_call", withSession("hook-pre-tool-call-read-inbox", SESSION, (d) => (d.tool_input = null)));
   assert.equal(bare, JSON.stringify({ action: "modify", args: { _session: stampSession("hermes", SESSION) } }));
-  for (const session of [null, "", "a/b", "x".repeat(65), 7]) {
+  for (const session of [null, "", "a/b", "x".repeat(80), 7]) {
     assert.equal(await run("pre_tool_call", withSession("hook-pre-tool-call-read-inbox", session as never)), undefined, String(session));
   }
 });

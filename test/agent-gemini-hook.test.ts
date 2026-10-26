@@ -144,7 +144,7 @@ test("events agentsocks does not handle and input that is not a hook payload pro
   for (const event of ["BeforeAgent", "BeforeModel", "AfterModel", "BeforeToolSelection", "Notification", "PreCompress", "", "sessionstart"]) {
     assert.equal(await geminiAgent.hook({ event, input: fixture("session-start"), call: spy }), undefined, event);
   }
-  const odd: Record<string, unknown>[] = [{}, { session_id: 42 }, { session_id: "../x" }, { session_id: "" }, { session_id: "x".repeat(65) }, { session_id: null, tool_name: [] }];
+  const odd: Record<string, unknown>[] = [{}, { session_id: 42 }, { session_id: "../x" }, { session_id: "" }, { session_id: "x".repeat(80) }, { session_id: null, tool_name: [] }];
   for (const event of ["SessionStart", "AfterTool", "AfterAgent", "SessionEnd", "BeforeTool"]) {
     for (const input of odd) assert.equal(await geminiAgent.hook({ event, input, call: spy }), undefined, `${event} ${JSON.stringify(input)}`);
   }

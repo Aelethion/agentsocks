@@ -259,6 +259,21 @@ test("a huge response body is cut off instead of being held in memory", async ()
   await until(() => cutOff);
 });
 
+test("a Hermes local session, local- and a 64-character hash, is woken at its own id", async () => {
+  configure();
+  const local = `local-${"0123456789abcdef".repeat(4)}`;
+  const out = await hermesAgent.wake!({ broker, thread: { thread_id: `hermes_${local}` } as never, line: "x" });
+  assert.deepEqual(out, { ok: true });
+  assert.equal(seen[0]?.url, `/api/sessions/${local}/chat`);
+});
+
+test("a Hermes thread id longer than 80 characters is refused before any request", async () => {
+  configure();
+  const out = await hermesAgent.wake!({ broker, thread: { thread_id: `hermes_${"s".repeat(74)}` } as never, line: "x" });
+  assert.equal(out.ok, false);
+  assert.equal(seen.length, 0);
+});
+
 test("a thread that is not a Hermes session is refused before any request", async () => {
   configure();
   const out = await hermesAgent.wake!({ broker, thread: { thread_id: "019e2f00-aaaa" } as never, line: "x" });

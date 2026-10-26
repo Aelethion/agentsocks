@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.1 (2026-10-26)
+
+### Fixed
+
+- **Hermes sessions with long ids.** Hermes names a local session `local-` and a 64-character hash, 70 characters, and agentsocks refused session ids over 64, so every agentsocks tool call from such a session was rejected and it could not be renamed. A session id is now accepted while the thread id built from it (the agent's name, an underscore and the id) fits 80 characters, the limit thread ids already had: up to 73 characters for Hermes, 71 for OpenCode and 80 for Codex. The session stamp and the Hermes wake follow the same rule.
+
+### Changed
+
+- `subscribe`, `unsubscribe`, `set_name` and `set_driver` are marked idempotent for MCP clients, and the channel tools say when to use them over their siblings. No tool sets the destructive or open-world hints Codex uses to decide whether to ask before running it.
+
+### Upgrading
+
+Update the package, run `agentsocks install` so the broker restarts on 0.4.1, then restart Hermes so the agentsocks MCP server it keeps running loads the new build.
+
 ## 0.4.0 (2026-10-19)
 
 Local channels, a tailnet gateway, more agents, and workers with drivers.

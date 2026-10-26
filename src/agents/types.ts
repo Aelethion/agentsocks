@@ -1,4 +1,5 @@
 import type { Broker, HookRequest, HookResult } from "../broker.ts";
+import { THREAD_ID } from "../limits.ts";
 import type { ThreadRow } from "../store.ts";
 
 export const AGENT_IDS = ["codex", "opencode", "hermes", "cursor", "copilot", "gemini", "omp"] as const;
@@ -19,11 +20,12 @@ export const kindLabel = (kind: string, agent?: string | null): string => (agent
 
 export const isAgentId = (v: unknown): v is AgentId => typeof v === "string" && (AGENT_IDS as readonly string[]).includes(v);
 
-const RAW_SESSION = /^[A-Za-z0-9_-]{1,64}$/;
+const RAW_SESSION = /^[A-Za-z0-9_-]+$/;
 
 export function threadIdFor(agent: AgentId, raw: unknown): string | undefined {
   if (typeof raw !== "string" || !RAW_SESSION.test(raw)) return undefined;
-  return agent === "codex" ? raw : `${agent}_${raw}`;
+  const id = agent === "codex" ? raw : `${agent}_${raw}`;
+  return THREAD_ID.test(id) ? id : undefined;
 }
 
 export function agentOfThreadId(threadId: string): InboxAgentId | undefined {
