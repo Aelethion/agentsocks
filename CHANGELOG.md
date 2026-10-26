@@ -12,7 +12,7 @@
 
 ### Upgrading
 
-Update the package, run `agentsocks install` so the broker restarts on 0.4.1, then restart Hermes so its hooks run the new build.
+Update the package, run `agentsocks install` so the broker restarts on 0.4.1, then restart Hermes so the agentsocks MCP server it keeps running loads the new build.
 
 ## 0.4.0 (2026-10-19)
 

@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { lstatSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { until } from "./support.ts";
 import { Broker } from "../src/broker.ts";
@@ -9,7 +10,7 @@ import { AGENT_IDS, threadIdFor, type InboxAgentId } from "../src/agents/index.t
 import { agentIdentity, codexIdentity } from "../src/peers.ts";
 import { runtimeDirFor, threadSocketName, threadSocketPath, type SocketContext } from "../src/paths.ts";
 import { sendMessage } from "../src/send.ts";
-import { stampSession, verifyStamp } from "../src/stamp.ts";
+import { stampKeyPath, stampSession, verifyStamp } from "../src/stamp.ts";
 
 const LINUX_LIMIT = 107;
 const DARWIN_LIMIT = 103;
@@ -51,6 +52,14 @@ test("a long Hermes session id is stamped and its stamp verifies, and an id too 
   assert.equal(verifyStamp("cursor", stampSession("hermes", HERMES_LOCAL)), undefined);
   assert.doesNotThrow(() => stampSession("hermes", "s".repeat(73)));
   assert.throws(() => stampSession("hermes", "s".repeat(74)), /not a session id agentsocks can stamp/);
+});
+
+test("a correctly signed stamp still does not verify when its session would make a thread id longer than 80 characters", () => {
+  stampSession("hermes", HERMES_LOCAL);
+  const key = Buffer.from(readFileSync(stampKeyPath(), "utf8").trim(), "hex");
+  const signed = (session: string) => `${session}.${createHmac("sha256", key).update(`agentsocks-stamp\0hermes\0${session}`).digest("hex").slice(0, 32)}`;
+  assert.equal(verifyStamp("hermes", signed("s".repeat(73))), "s".repeat(73));
+  assert.equal(verifyStamp("hermes", signed("s".repeat(74))), undefined);
 });
 
 test("a thread id of 36 characters or fewer keeps the socket name it has always had, and a longer one is hashed into a name that is the same every time and differs between ids", () => {
