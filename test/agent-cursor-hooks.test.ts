@@ -199,7 +199,7 @@ test("unknown events, an empty event and input that is not what Cursor documents
   for (const event of ["beforeSubmitPrompt", "afterAgentResponse", "subagentStop", "SessionStart", "", "nonsense", "constructor", "toString", "__proto__"]) {
     assert.equal(await cursorAgent.hook({ event, input: fixture("sessionStart"), call }), undefined, event);
   }
-  for (const input of [{}, { conversation_id: 7 }, { conversation_id: "a b" }, { conversation_id: "x".repeat(65) }, { session_id: ["x"] }]) {
+  for (const input of [{}, { conversation_id: 7 }, { conversation_id: "a b" }, { conversation_id: "x".repeat(80) }, { session_id: ["x"] }]) {
     for (const event of ["sessionStart", "postToolUse", "stop", "sessionEnd", "preToolUse"]) {
       assert.equal(await cursorAgent.hook({ event, input, call }), undefined, `${event} ${JSON.stringify(input)}`);
     }
