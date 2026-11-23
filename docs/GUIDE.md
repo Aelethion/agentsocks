@@ -167,7 +167,7 @@ OpenCode, Hermes, Cursor, GitHub Copilot CLI, Gemini CLI and OMP sessions are pe
 | Agent | How it connects | How it hears about a message | Idle wake |
 |---|---|---|---|
 | OpenCode | A generated plugin, `plugins/agentsocks.js` in OpenCode's config folder, that gives the model the agentsocks tools | A one-line notice added to the next tool result; a one-line prompt when idle | Yes, through OpenCode's own client in the plugin |
-| Hermes | An MCP server and five shell hooks in `config.yaml` (you approve the hooks once in Hermes) | A notice at the start of the next turn; one more turn at the end of an edit turn | Not for CLI, TUI or Desktop sessions on Hermes 0.23; sessions created through Hermes's API server only, when agentsocks has its key (see [Waking an idle Hermes session](#waking-an-idle-hermes-session)) |
+| Hermes | An MCP server and five shell hooks in `config.yaml` (you approve the hooks once in Hermes), and a generated Hermes plugin, `plugins/agentsocks/`, for the idle wake | A notice at the start of the next turn; one more turn at the end of an edit turn; a user message when idle | Yes, through the plugin's `ctx.inject_message`; each wake is a model turn (see [Waking an idle Hermes session](#waking-an-idle-hermes-session)) |
 | Cursor (CLI and IDE) | `~/.cursor/mcp.json` and `~/.cursor/hooks.json` | A notice after the next tool call; a follow-up message when the turn ends with messages unread | No |
 | GitHub Copilot CLI | `~/.copilot/mcp-config.json` and one hooks file under `~/.copilot/hooks/` | A notice after the next tool call; one more turn when the model tries to finish | No |
 | Gemini CLI | `mcpServers` and `hooks` in `~/.gemini/settings.json` | A notice after the next tool call; one more turn when the model finishes | No |
@@ -179,14 +179,28 @@ Hermes, Cursor, Copilot CLI and Gemini CLI do not say which session made an MCP 
 
 #### Waking an idle Hermes session
 
-Checked against Hermes 0.23.3. An idle Hermes session hears about a message when its next turn starts: the `pre_llm_call` hook adds the notice then. Nothing earlier reaches it.
+Checked against the Hermes 0.23.3 source for Desktop chats hosted by `hermes serve`. It has not been run against a live Hermes yet.
 
-- **CLI, TUI and Desktop sessions cannot be woken.** In 0.23, `hermes chat`, the TUI and Desktop all run their turns through the profile gateway's session authority. Hermes's API server starts a turn only in a session whose source is the API server itself, and answers any other session with HTTP 409 (`permission_denied`, in Hermes's `gateway/session_api_turn.py`). A Desktop window over SSH runs its own isolated backend, which the API server cannot reach at all. `agentsocks doctor` prints a `warn:` line naming every Hermes session that cannot be woken.
-- **Sessions created through the API server can be woken.** These are sessions a frontend opened with `POST /api/sessions`. agentsocks wakes one by posting the one-line notice to `/api/sessions/<id>/chat`. A 409 is recorded as a failed wake with its reason, and the message still waits in the inbox.
-- **A workaround inside the session.** Hermes's `/heartbeat every <interval> <prompt>` (60 s at least) starts an ordinary turn whenever the session is idle, so the hook announces any waiting message. Each beat is a full model turn and costs tokens. This has not been run against agentsocks.
-- **What would wake every session.** Hermes's own supported route is its gateway WebSocket: `hermes gateway attach --json`, then `session.resume` and `prompt.submit` on `/api/ws`. agentsocks does not do this yet. It needs a running profile gateway (`hermes gateway status`), and the notice would show in the window as a user message.
+`agentsocks install --hermes` also writes a small Hermes plugin to `<HERMES_HOME>/plugins/agentsocks/`: `plugin.yaml` and `__init__.py`, each marked as written by agentsocks and readable by your user only. It then runs two Hermes commands:
 
-To switch on the API wake, start Hermes's API server bound to this machine with a key, then tell agentsocks where it is:
+```bash
+hermes config set plugins.entries.agentsocks.allow_gateway_injection true   # lets the plugin start a turn
+hermes plugins enable agentsocks                                            # loads it, also into a running hermes serve
+```
+
+If `hermes` is not on the PATH, or either command fails, install prints the commands for you to run. `agentsocks doctor` says whether the plugin is in place, enabled and allowed to start turns.
+
+- **Attaching.** The plugin attaches a chat the first time its Hermes process sees it: when the chat opens, when its session starts, or at its next turn. A chat that was open before the plugin was enabled is attached at its next open or turn. When compression gives a chat a new session id, the new id is attached too.
+- **Waking.** One background thread in the plugin waits on the agentsocks broker. When a message arrives for an idle attached chat, the broker gives the plugin the one-line notice for that chat only, and the plugin hands it to Hermes (`ctx.inject_message`), which starts a turn there. The `pre_llm_call` hook recognises the line, so the message is not announced twice.
+- **What you see.** The notice shows in the chat as a user message, for example `📨 agentsocks: new message from a Claude Code session. Read it with read_inbox.` It holds a count and a sender kind, never message text. The model reads the message itself with `read_inbox`.
+- **Cost.** Each wake is a full model turn. Wakes are debounced and capped per hour, as for every agent.
+- **A busy chat** is not interrupted. Hermes queues the line until the turn ends, and the hook announces new messages at the next turn anyway.
+- **A chat no plugin has attached** is not woken. The broker records a failed wake with the reason, and the message waits in the inbox for the next turn. `agentsocks doctor` prints a `warn:` line naming each Hermes chat that no plugin can wake.
+- **Where it runs.** The plugin calls the agentsocks CLI on the machine where the Hermes backend runs. A Desktop window over SSH is woken only when agentsocks is installed on that remote machine.
+
+To turn wakes off and keep everything else, run `hermes plugins disable agentsocks`. `agentsocks uninstall` disables the plugin, removes the `allow_gateway_injection` grant through Hermes's CLI and deletes only the plugin files that carry the agentsocks marker.
+
+**The API wake.** Before the plugin, the only route was Hermes's API server, and it is still tried when no plugin is listening for a chat. Hermes 0.23 starts an API turn only in a session the API server itself created; it answers a CLI, TUI or Desktop session with HTTP 409, which is recorded as a failed wake. To switch it on, start Hermes's API server bound to this machine with a key, then tell agentsocks where it is:
 
 ```bash
 # ~/.hermes/.env (or the same settings under gateway.platforms.api_server in config.yaml, which win over .env)
@@ -207,7 +221,6 @@ curl -s http://127.0.0.1:8642/health
 ```
 
 `apiKeyFile` is read for `HERMES_API_SERVER_KEY` and then for Hermes's own `API_SERVER_KEY`. Without it, agentsocks looks for `HERMES_API_SERVER_KEY` in its own env file. A key only in the broker's environment does not count. agentsocks refuses an `apiUrl` on another machine unless `"allowRemote": true` is set and the URL is https, and it never follows redirects.
-
 
 `agentsocks install` with no flags wires every one of them it finds. `--opencode`, `--hermes`, `--cursor`, `--copilot`, `--gemini` and `--omp` wire one, and `agentsocks uninstall` removes every entry it added (your own hooks and servers are left in place, each file is backed up first, and a file that does not parse is never touched).
 

@@ -55,7 +55,7 @@ sends a message. The [guide](https://github.com/Aelethion/agentsocks/blob/main/d
 | Codex CLI | Supported, run live | Through its hooks, before the next tool call | Yes, with `codex queue` |
 | OpenCode | Experimental, not run live against 0.4 | A notice on the next tool result | Yes |
 | OMP (oh-my-pi) | Experimental; an earlier 0.4 build passed a live run | A note on the next tool result | Yes |
-| Hermes | Experimental, not run live against 0.4 | A notice at the start of the next turn | Only with Hermes's API server on |
+| Hermes | Experimental, not run live against 0.4 | A notice at the start of the next turn | Yes, through a generated Hermes plugin |
 | Cursor (CLI and IDE) | Experimental, not run live against 0.4 | A notice after the next tool call | No |
 | GitHub Copilot CLI | Experimental, not run live against 0.4 | A notice after the next tool call | No |
 | Gemini CLI | Experimental, not run live against 0.4 | A notice after the next tool call | No |
