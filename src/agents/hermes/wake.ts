@@ -53,10 +53,18 @@ export function wakeConfig(path = configPath()): WakeConfig {
   return { state: "on", base, key };
 }
 
+// Hermes 0.23 runs every CLI, TUI and Desktop turn through its gateway's session authority, and its API server
+// starts a turn only in a session whose source is the API server itself (gateway/session_api_turn.py refuses any
+// other with permission_denied, HTTP 409). So the API wake reaches API-created sessions and nothing else.
+export const HERMES_API_WAKE_REACH =
+  "the Hermes API wake reaches only sessions created through Hermes's API server; Hermes 0.23 refuses it (HTTP 409) for CLI, TUI and Desktop sessions, which wait for their next turn";
+export const HERMES_NO_WAKE =
+  "A message waits until the session's next turn, when the pre_llm_call hook announces it. Hermes 0.23 gives an outside program no way to start a turn in a CLI, TUI or Desktop session through its API server; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
+
 export function describeWake(config: WakeConfig): string {
-  if (config.state === "on") return `API wake on through ${config.base.origin}`;
+  if (config.state === "on") return `API wake on through ${config.base.origin}; ${HERMES_API_WAKE_REACH}`;
   if (config.state === "incomplete") return `API wake is not active: ${config.why}`;
-  return "no API wake configured, so a message waits until Hermes reads it (pull only)";
+  return "no API wake configured, so a message waits until Hermes reads it at its next turn (pull only)";
 }
 
 export interface WakeLimits {
@@ -110,7 +118,19 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
           if (seen > limits.maxBytes) req.destroy();
         });
         res.on("error", () => {});
-        done(status >= 200 && status < 300 ? { ok: true } : { ok: false, detail: status >= 300 && status < 400 ? `HTTP ${status} from ${where}; redirects are not followed` : `HTTP ${status} from ${where}` });
+        done(
+          status >= 200 && status < 300
+            ? { ok: true }
+            : {
+                ok: false,
+                detail:
+                  status >= 300 && status < 400
+                    ? `HTTP ${status} from ${where}; redirects are not followed`
+                    : status === 409
+                      ? `HTTP 409 from ${where}: Hermes starts API turns only in sessions its API server created, not in a CLI, TUI or Desktop session`
+                      : `HTTP ${status} from ${where}`,
+              },
+        );
       },
     );
     req.on("error", (err: NodeJS.ErrnoException) => done({ ok: false, detail: `${err.code === "ECONNREFUSED" ? "connection refused" : (err.code ?? "request failed")} at ${where}` }));

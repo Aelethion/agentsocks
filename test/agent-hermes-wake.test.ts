@@ -209,6 +209,14 @@ test("a 500 and a refused connection are failed wakes too", async () => {
   assert.match(audit("wake_failed").filter((l) => l.includes(other))[0] ?? "", /connection refused/);
 });
 
+test("a 409, which Hermes 0.23 answers for a CLI, TUI or Desktop session, is a failed wake that says why", async () => {
+  configure();
+  reply = (_req, res) => res.writeHead(409, { "content-type": "application/json" }).end('{"error":{"code":"permission_denied"}}');
+  const id = await idleThreadWithMessage();
+  await broker.wake(id, Date.now() + 5000);
+  assert.match(audit("wake_failed").filter((l) => l.includes(id))[0] ?? "", /HTTP 409 .*only in sessions its API server created/);
+});
+
 test("a redirect is a failure and is not followed", async () => {
   configure();
   let elsewhere = 0;

@@ -11,11 +11,12 @@ export interface Plan {
   hooks: HookEntry[];
 }
 
-export type Added = { ok: true; text: string; skipped: string[]; adopted: number } | { ok: false; reason: string };
+export type Added = { ok: true; text: string; skipped: string[]; adopted: number; rescued: string[] } | { ok: false; reason: string };
 
 export interface Removed {
   text: string;
   removed: number;
+  rescued: string[];
   problem?: string;
 }
 
@@ -23,6 +24,7 @@ export interface Found {
   server: string | undefined;
   hooks: string[];
   foreignServer: boolean;
+  rescued: string[];
   problem?: string;
 }
 
@@ -56,6 +58,12 @@ const BLOCK_HEADER = /(?:^|[\s:-])[|>][0-9+-]*\s*(?:#.*)?$/;
 const LINE_BREAKS = new RegExp(`[${String.fromCharCode(0x85, 0x2028, 0x2029)}]`);
 const OWN_ENV: readonly string[] = ["NODE_NO_WARNINGS", ...PINNED];
 const NOTE = "added by agentsocks install; agentsocks uninstall removes it";
+// A top-level key agentsocks had to create is written as a plain line carrying this note, never inside a
+// marked block: Hermes's round-trip writer appends a new child of a mapping after every comment that trails
+// its last value, so a block that owned the key line would swallow entries Hermes adds later.
+const PARENT_NOTE = "agentsocks: added this key; agentsocks uninstall removes it when nothing else is under it";
+const PARENT = /^([A-Za-z_]+): +# agentsocks: added this key; agentsocks uninstall removes it when nothing else is under it$/;
+const TOP_HEADER = /^([A-Za-z_]+):$/;
 
 const MCP = "mcp_servers";
 const HOOKS = "hooks";
@@ -101,9 +109,35 @@ function refuseUnsafe(lines: Line[]): string | undefined {
 
 const digest = (id: string, restore: string, body: string[]): string => createHash("sha256").update(`${id}\0${restore}\0${body.join("\n")}`).digest("hex").slice(0, 12);
 
-function stripMarked(lines: Line[]): { lines: Line[]; blocks: Block[]; removed: number } | string {
+function nextContent(lines: Line[], from: number): Line | undefined {
+  for (let i = from; i < lines.length; i++) if (content(lines[i]!.text)) return lines[i];
+  return undefined;
+}
+
+const keyNames = (inner: string[]): string => {
+  const shallow = Math.min(...inner.filter(content).map(indentOf));
+  const names = inner.flatMap((s) => (content(s) && indentOf(s) === shallow ? [/^ *(?:- +)?([^:#]+):/.exec(s)?.[1]?.trim()].filter((n): n is string => !!n) : []));
+  return names.length > 0 ? names.slice(0, 4).join(", ") + (names.length > 4 ? ", ..." : "") : "lines";
+};
+
+// A block whose sha does not match may still hold every line we wrote, untouched, with lines someone else wrote
+// before or after them (Hermes's writer puts a new mapping child after trailing comments, which can be inside our
+// block). Those foreign lines are theirs and stay; ours are found only as one exact run whose sha matches.
+function rescue(id: string, restore: string, sha: string, inner: string[]): { ours: string[]; before: string[]; after: string[] } | undefined {
+  if (restore) return undefined;
+  for (let k = 1; k < inner.length; k++) {
+    const head = inner.slice(0, k);
+    const tail = inner.slice(k);
+    if (head.some(content) && digest(id, restore, tail) === sha) return { ours: tail, before: head, after: [] };
+    if (tail.some(content) && digest(id, restore, head) === sha) return { ours: head, before: [], after: tail };
+  }
+  return undefined;
+}
+
+function stripMarked(lines: Line[]): { lines: Line[]; blocks: Block[]; removed: number; rescued: string[] } | string {
   const out: Line[] = [];
   const blocks: Block[] = [];
+  const rescued: string[] = [];
   let noFinalEol = false;
   for (let i = 0; i < lines.length; i++) {
     const begin = BEGIN.exec(lines[i]!.text);
@@ -119,8 +153,17 @@ function stripMarked(lines: Line[]): { lines: Line[]; blocks: Block[]; removed: 
       j++;
     }
     if (j >= lines.length || END.exec(lines[j]!.text)![2] !== id) return `the managed block ${id} that begins at line ${i + 1} has no matching end`;
-    const inner = lines.slice(i + 1, j).map((l) => l.text);
-    if (digest(id, begin[4] ?? "", inner) !== begin[3]) return `the managed block ${id} at line ${i + 1} was edited, or is not one agentsocks wrote; remove it by hand or put it back as it was`;
+    let inner = lines.slice(i + 1, j).map((l) => l.text);
+    let after: Line[] = [];
+    if (digest(id, begin[4] ?? "", inner) !== begin[3]) {
+      const saved = rescue(id, begin[4] ?? "", begin[3]!, inner);
+      if (!saved) return `the managed block ${id} at line ${i + 1} was edited, or holds lines agentsocks did not write mixed in with its own; it is left untouched, so remove it by hand or put it back as it was`;
+      const eolAt = (n: number): string => lines[i + 1 + n]!.eol;
+      out.push(...saved.before.map((text, n) => ({ text, eol: eolAt(n) })));
+      after = saved.after.map((text, n) => ({ text, eol: eolAt(saved.before.length + saved.ours.length + n) }));
+      rescued.push(`${keyNames([...saved.before, ...saved.after])} (inside the agentsocks block ${id} at line ${i + 1}, not written by agentsocks)`);
+      inner = saved.ours;
+    }
     if (begin[4]) {
       const previous = out.at(-1);
       if (!previous || !content(previous.text)) return `the managed block ${id} at line ${i + 1} has no line above it to restore`;
@@ -130,12 +173,28 @@ function stripMarked(lines: Line[]): { lines: Line[]; blocks: Block[]; removed: 
         return `the managed block ${id} at line ${i + 1} holds a restore note that cannot be read`;
       }
     }
+    // An older install wrapped a whole top-level key (`mcp_servers:` and all) in one block. If entries someone else
+    // wrote follow the block at a deeper indent, they belong to that key, so the key line stays.
+    const header = TOP_HEADER.exec(inner[0] ?? "");
+    const follower = after.find((l) => content(l.text)) ?? (after.length === 0 ? nextContent(lines, j + 1) : undefined);
+    if (header && follower && indentOf(follower.text) > 0) out.push({ text: `${header[1]}: # ${PARENT_NOTE}`, eol: lines[i]!.eol });
+    out.push(...after);
     blocks.push({ id, inner });
     if (j === lines.length - 1 && lines[j]!.eol === "") noFinalEol = true;
     i = j;
   }
+  // A key line agentsocks created goes when nothing is left under it.
+  for (let k = out.length - 1; k >= 0; k--) {
+    if (!PARENT.test(out[k]!.text)) continue;
+    let n = k + 1;
+    while (n < out.length && !(content(out[n]!.text) && indentOf(out[n]!.text) === 0)) n++;
+    if (!out.slice(k + 1, n).some((l) => content(l.text))) {
+      if (k === out.length - 1 && out[k]!.eol === "") noFinalEol = true;
+      out.splice(k, 1);
+    }
+  }
   if (noFinalEol && out.length > 0) out[out.length - 1] = { ...out[out.length - 1]!, eol: "" };
-  return { lines: out, blocks, removed: blocks.length };
+  return { lines: out, blocks, removed: blocks.length, rescued };
 }
 
 interface Split {
@@ -381,6 +440,18 @@ function insertBlock(lines: Line[], at: number, indent: number, id: string, inne
   return out;
 }
 
+// Appends `key: # PARENT_NOTE` as a plain line and our entries under it in a block, at the end of the file.
+function underNewKey(lines: Line[], key: string, id: string, inner: string[]): Line[] {
+  const eol = eolFor(lines, lines.length);
+  const out = lines.map((l) => ({ ...l }));
+  const trailing = out.length > 0 && out.at(-1)!.eol === "";
+  if (trailing) out.at(-1)!.eol = eol;
+  out.push({ text: `${key}: # ${PARENT_NOTE}`, eol });
+  const done = insertBlock(out, out.length, 2, id, inner);
+  if (trailing) done.at(-1)!.eol = "";
+  return done;
+}
+
 function flatten(inner: string[], lead: number): string[] {
   return inner.map((s) => (s === "" ? s : pad(lead) + s));
 }
@@ -396,7 +467,7 @@ function addServer(lines: Line[], entry: string[]): { lines: Line[]; skipped: bo
   const top = topKeys(lines);
   if (typeof top === "string") return top;
   const key = top.find((k) => k.name === MCP);
-  if (!key) return { lines: insertBlock(lines, lines.length, 0, MCP, [`${MCP}:`, ...flatten(entry, 2)]), skipped: false };
+  if (!key) return { lines: underNewKey(lines, MCP, `${MCP}.agentsocks`, entry), skipped: false };
   const section = mapSection(lines, key);
   if (typeof section === "string") return section;
   if (section.children.some((c) => c.name === "agentsocks")) return { lines, skipped: true };
@@ -412,7 +483,7 @@ function addHooks(lines: Line[], hooks: HookEntry[]): { lines: Line[] } | string
   if (typeof top === "string") return top;
   const eventLines = (list: HookEntry[], lead: number): string[] => list.flatMap((h) => [`${h.event}:`, ...flatten(h.item, lead)]);
   const key = top.find((k) => k.name === HOOKS);
-  if (!key) return { lines: insertBlock(lines, lines.length, 0, HOOKS, [`${HOOKS}:`, ...flatten(eventLines(hooks, 2), 2)]) };
+  if (!key) return { lines: underNewKey(lines, HOOKS, `${HOOKS}.events`, eventLines(hooks, 2)) };
   const section = mapSection(lines, key);
   if (typeof section === "string") return section;
   if (section.mode === "empty" || section.mode === "flow-empty") {
@@ -521,21 +592,21 @@ export function addManaged(source: string, plan: Plan): Added {
   }
   const check = stripMarked(lines);
   if (typeof check === "string" || join(check.lines) !== join(clean)) return { ok: false, reason: "the edit did not round-trip, so nothing was changed" };
-  return { ok: true, text: join(lines), skipped, adopted: adopted.count };
+  return { ok: true, text: join(lines), skipped, adopted: adopted.count, rescued: stripped.rescued };
 }
 
 export function removeManaged(source: string): Removed {
   const original = split(source);
   const stripped = stripMarked(original);
-  if (typeof stripped === "string") return { text: source, removed: 0, problem: stripped };
+  if (typeof stripped === "string") return { text: source, removed: 0, rescued: [], problem: stripped };
   const adopted = adoptUnmarked(stripped.lines);
-  if (typeof adopted === "string") return { text: join(stripped.lines), removed: stripped.removed, problem: adopted };
-  return { text: join(adopted.lines), removed: stripped.removed + adopted.count };
+  if (typeof adopted === "string") return { text: join(stripped.lines), removed: stripped.removed, rescued: stripped.rescued, problem: adopted };
+  return { text: join(adopted.lines), removed: stripped.removed + adopted.count, rescued: stripped.rescued };
 }
 
 export function inspectManaged(source: string): Found {
   const stripped = stripMarked(split(source));
-  if (typeof stripped === "string") return { server: undefined, hooks: [], foreignServer: false, problem: stripped };
+  if (typeof stripped === "string") return { server: undefined, hooks: [], foreignServer: false, rescued: [], problem: stripped };
   const marked = stripped.blocks.map((b) => ({ id: b.id, text: b.inner.join("\n") }));
   const adopted = adoptUnmarked(stripped.lines);
   const unmarked = typeof adopted === "string" ? { server: undefined, hooks: [] as string[], foreignServer: false } : adopted;
@@ -544,6 +615,7 @@ export function inspectManaged(source: string): Found {
     server,
     hooks: [...marked.filter((b) => b.id.startsWith(HOOKS)).map((b) => b.text), ...unmarked.hooks],
     foreignServer: unmarked.foreignServer,
+    rescued: stripped.rescued,
     ...(typeof adopted === "string" && { problem: adopted }),
   };
 }

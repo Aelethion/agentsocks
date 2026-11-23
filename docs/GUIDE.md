@@ -167,7 +167,7 @@ OpenCode, Hermes, Cursor, GitHub Copilot CLI, Gemini CLI and OMP sessions are pe
 | Agent | How it connects | How it hears about a message | Idle wake |
 |---|---|---|---|
 | OpenCode | A generated plugin, `plugins/agentsocks.js` in OpenCode's config folder, that gives the model the agentsocks tools | A one-line notice added to the next tool result; a one-line prompt when idle | Yes, through OpenCode's own client in the plugin |
-| Hermes | An MCP server and five shell hooks in `config.yaml` (you approve the hooks once in Hermes) | A notice at the start of the next turn; one more turn at the end of an edit turn | Only if you run Hermes's API server and give agentsocks its key (`hermes` in `config.json`) |
+| Hermes | An MCP server and five shell hooks in `config.yaml` (you approve the hooks once in Hermes) | A notice at the start of the next turn; one more turn at the end of an edit turn | Not for CLI, TUI or Desktop sessions on Hermes 0.23; sessions created through Hermes's API server only, when agentsocks has its key (see [Waking an idle Hermes session](#waking-an-idle-hermes-session)) |
 | Cursor (CLI and IDE) | `~/.cursor/mcp.json` and `~/.cursor/hooks.json` | A notice after the next tool call; a follow-up message when the turn ends with messages unread | No |
 | GitHub Copilot CLI | `~/.copilot/mcp-config.json` and one hooks file under `~/.copilot/hooks/` | A notice after the next tool call; one more turn when the model tries to finish | No |
 | Gemini CLI | `mcpServers` and `hooks` in `~/.gemini/settings.json` | A notice after the next tool call; one more turn when the model finishes | No |
@@ -176,6 +176,38 @@ OpenCode, Hermes, Cursor, GitHub Copilot CLI, Gemini CLI and OMP sessions are pe
 The agents that cannot be woken are pull-only: they hear nothing while idle, and a message waits until the session next calls a tool, finishes a turn, or is asked to read its inbox. The notices and nudges are counts and a sender kind, never message text, and a nudge at the end of a turn is limited to three in a row.
 
 Hermes, Cursor, Copilot CLI and Gemini CLI do not say which session made an MCP call, so their pre-tool hook stamps the session into the arguments of agentsocks tools, signed with a key only your user can read, and the MCP server accepts a session only from a valid stamp ([SECURITY.md](../SECURITY.md) has the detail and its limits). Whether each agent really applies that rewrite to MCP tools is not documented, and it is the first thing a live run has to show. Gemini CLI also asks you to confirm each agentsocks tool on first use unless you allow the server; agentsocks never sets `trust`.
+
+#### Waking an idle Hermes session
+
+Checked against Hermes 0.23.3. An idle Hermes session hears about a message when its next turn starts: the `pre_llm_call` hook adds the notice then. Nothing earlier reaches it.
+
+- **CLI, TUI and Desktop sessions cannot be woken.** In 0.23, `hermes chat`, the TUI and Desktop all run their turns through the profile gateway's session authority. Hermes's API server starts a turn only in a session whose source is the API server itself, and answers any other session with HTTP 409 (`permission_denied`, in Hermes's `gateway/session_api_turn.py`). A Desktop window over SSH runs its own isolated backend, which the API server cannot reach at all. `agentsocks doctor` prints a `warn:` line naming every Hermes session that cannot be woken.
+- **Sessions created through the API server can be woken.** These are sessions a frontend opened with `POST /api/sessions`. agentsocks wakes one by posting the one-line notice to `/api/sessions/<id>/chat`. A 409 is recorded as a failed wake with its reason, and the message still waits in the inbox.
+- **A workaround inside the session.** Hermes's `/heartbeat every <interval> <prompt>` (60 s at least) starts an ordinary turn whenever the session is idle, so the hook announces any waiting message. Each beat is a full model turn and costs tokens. This has not been run against agentsocks.
+- **What would wake every session.** Hermes's own supported route is its gateway WebSocket: `hermes gateway attach --json`, then `session.resume` and `prompt.submit` on `/api/ws`. agentsocks does not do this yet. It needs a running profile gateway (`hermes gateway status`), and the notice would show in the window as a user message.
+
+To switch on the API wake, start Hermes's API server bound to this machine with a key, then tell agentsocks where it is:
+
+```bash
+# ~/.hermes/.env (or the same settings under gateway.platforms.api_server in config.yaml, which win over .env)
+API_SERVER_ENABLED=true
+API_SERVER_HOST=127.0.0.1        # the default; keep the server off the network
+API_SERVER_PORT=8642             # the default
+API_SERVER_KEY=<a random string of at least 16 characters; Hermes refuses placeholders>
+```
+
+```bash
+hermes gateway                   # the API server runs inside the gateway; start it after editing .env
+curl -s http://127.0.0.1:8642/health
+```
+
+```json
+// ~/.config/agentsocks/config.json
+{ "hermes": { "apiUrl": "http://127.0.0.1:8642", "apiKeyFile": "~/.hermes/.env" } }
+```
+
+`apiKeyFile` is read for `HERMES_API_SERVER_KEY` and then for Hermes's own `API_SERVER_KEY`. Without it, agentsocks looks for `HERMES_API_SERVER_KEY` in its own env file. A key only in the broker's environment does not count. agentsocks refuses an `apiUrl` on another machine unless `"allowRemote": true` is set and the URL is https, and it never follows redirects.
+
 
 `agentsocks install` with no flags wires every one of them it finds. `--opencode`, `--hermes`, `--cursor`, `--copilot`, `--gemini` and `--omp` wire one, and `agentsocks uninstall` removes every entry it added (your own hooks and servers are left in place, each file is backed up first, and a file that does not parse is never touched).
 
@@ -498,7 +530,7 @@ digests arrive at the 15-minute limit rather than when it goes idle.
 |---|---|
 | Claude Code | Posted to the session's own cross-session inbox socket (`$XDG_RUNTIME_DIR/cc-socks/<pid>.sock`) in Claude Code's own frame format. Claude Code does the rest: it labels the message as coming from another session, never as your input, and applies the session's inbound settings. |
 | Codex | Stored in that thread's agentsocks inbox. Codex is told a message is waiting by an agentsocks hook or, when the session is idle, by `codex queue`. The message text itself only reaches the model as the result of `read_inbox` or `wait_for_message`. |
-| OpenCode, Hermes, Cursor, Copilot CLI, Gemini CLI, OMP | The same inbox, in the same way. The notice that a message is waiting comes from that agent's own hook, plugin or extension mechanism, and the text only reaches the model as the result of `read_inbox` or `wait_for_message`. Only OpenCode and OMP (and Hermes, when you give agentsocks its API key) can be woken when idle; the others are told at their next tool call and before they finish a turn. |
+| OpenCode, Hermes, Cursor, Copilot CLI, Gemini CLI, OMP | The same inbox, in the same way. The notice that a message is waiting comes from that agent's own hook, plugin or extension mechanism, and the text only reaches the model as the result of `read_inbox` or `wait_for_message`. Only OpenCode and OMP (and Hermes sessions created through Hermes's API server, when you give agentsocks its key) can be woken when idle; the others are told at their next tool call and before they finish a turn. |
 
 A per-user broker (`agentsocks daemon`, started on demand) keeps the Codex inboxes in SQLite and
 serves one socket per Codex thread in the same format Claude Code uses, which is why Claude's built-in
