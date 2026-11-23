@@ -36,7 +36,6 @@ const OPS_EXPECTED = [
   "list_remote_peers",
   "list_threads",
   "message_status",
-  "omp_wake_wait",
   "opencode_wake_wait",
   "peer_api_add",
   "peer_api_list",
@@ -55,6 +54,7 @@ const OPS_EXPECTED = [
   "task_update",
   "top",
   "wait",
+  "wake_wait",
 ];
 
 const TOOLS_EXPECTED = [
