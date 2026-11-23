@@ -145,7 +145,7 @@ test("an install from a different place updates the entries where they are inste
   assert.ok(!text.includes("/opt/agentsocks"));
   assert.equal(text.match(/hook hermes pre_llm_call/g)?.length, 1);
   assert.equal(text.match(/^ {2}agentsocks:/gm)?.length, 1);
-  assert.deepEqual(moved.backups, [config()]);
+  assert.deepEqual(moved.backups, [config(), join(home, ".hermes", "plugins", "agentsocks", "__init__.py")]);
 });
 
 test("the config file is created private when there was none, and an existing file keeps its permissions and is not left beside a temp file", () => {
@@ -155,7 +155,8 @@ test("the config file is created private when there was none, and an existing fi
   chmodSync(config(), 0o640);
   installer.install(rig(home).ctx);
   assert.equal(statSync(config()).mode & 0o777, 0o640);
-  assert.deepEqual(readdirSync(join(home, ".hermes")), ["config.yaml"]);
+  assert.deepEqual(readdirSync(join(home, ".hermes")), ["config.yaml", "plugins"]);
+  assert.deepEqual(readdirSync(join(home, ".hermes", "plugins", "agentsocks")).sort(), ["__init__.py", "plugin.yaml"]);
 });
 
 test("a config.yaml that is a symlink (a dotfiles setup) stays a symlink and its target is the file that is edited and restored", () => {

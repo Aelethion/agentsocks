@@ -51,6 +51,7 @@ import { processArgs, buildHash } from "./procinfo.ts";
 import { findCodexThread, permissionModeFromApproval } from "./codexstate.ts";
 import { SWEEP_STAGES, type SweepStage } from "./sweep/index.ts";
 import { OPS } from "./brokerops/index.ts";
+import { listening, sinkId, sinkOf } from "./agents/opencode/sink.ts";
 import { livePeerNames, normalizeSessionName, sanitizeSessionName, sessionNameRefusal } from "./brokerops/threads.ts";
 import { AGENTS, agentOfThreadId, agentSpec, type AgentId, type AgentSpec } from "./agents/index.ts";
 import type { Conn, Reply, OpRequest } from "./brokerops/types.ts";
@@ -518,6 +519,8 @@ export class Broker {
 
   describe(t: ThreadRow) {
     const driver = driverOfThread(this.store, t);
+    const sink = t.agent === "codex" ? undefined : sinkOf(this, sinkId(t.remote) ?? "");
+    const listened = sink !== undefined && listening(sink, Date.now());
     return {
       threadId: t.thread_id,
       name: cleanText(t.name, 64),
@@ -530,6 +533,7 @@ export class Broker {
       socketPath: this.advertisedPath(t.thread_id),
       queued: this.store.queuedCount(t.thread_id),
       ...(driver && { driver: driver.name }),
+      ...(listened && { wakeListening: true }),
     };
   }
 

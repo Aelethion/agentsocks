@@ -1,10 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { AgentInstaller, AgentStatus, InstallContext } from "../types.ts";
 import { isRecord, writeAtomic } from "../files.ts";
-import { configFile, hermesHome, HERMES_EVENTS, wiring } from "./config.ts";
+import { configFile, hermesHome, HERMES_EVENTS, pinnedEnv, wiring } from "./config.ts";
 import { consentFor, consentInstruction } from "./consent.ts";
-import { describeWake, wakeConfig } from "./wake.ts";
+import { PLUGIN_FILES, PLUGIN_MARKER, PLUGIN_NAME, pluginFiles, type PluginFile } from "./plugin.ts";
+import { describeWake, pluginDir, wakeConfig } from "./wake.ts";
 import { addManaged, inspectManaged, removeManaged } from "./yaml.ts";
 
 const norm = (s: string): string => s.replace(/\s+/g, " ");
@@ -68,9 +70,120 @@ function guard(path: string, before: string, after: string): void {
 
 const eventsLine = HERMES_EVENTS.join(", ");
 
+const INJECTION_KEY = `plugins.entries.${PLUGIN_NAME}.allow_gateway_injection`;
+const ENABLE = ["plugins", "enable", PLUGIN_NAME];
+const ALLOW = ["config", "set", INJECTION_KEY, "true"];
+const DISABLE = ["plugins", "disable", PLUGIN_NAME];
+const DISALLOW = ["config", "unset", INJECTION_KEY];
+const HERMES_CLI_MS = 60_000;
+
+const isPlugin = (text: string | undefined): boolean => text !== undefined && text.startsWith(PLUGIN_MARKER);
+
+function wantedPlugin(ctx: InstallContext): Record<PluginFile, string> {
+  const [node, cli] = ctx.command();
+  return pluginFiles({ node: node!, cli: cli!, pinned: pinnedEnv() });
+}
+
+interface PluginSettings {
+  enabled: boolean;
+  allowed: boolean;
+}
+
+// What Hermes's config says about the plugin, or undefined when it cannot be read (no python3 with PyYAML).
+function pluginSettings(text: string): PluginSettings | undefined {
+  const parsed = parseYaml(text);
+  if (!parsed?.ok) return undefined;
+  const plugins = isRecord(parsed.doc) && isRecord(parsed.doc.plugins) ? parsed.doc.plugins : {};
+  const listed = (key: string): boolean => Array.isArray(plugins[key]) && (plugins[key] as unknown[]).includes(PLUGIN_NAME);
+  const entry = isRecord(plugins.entries) && isRecord(plugins.entries[PLUGIN_NAME]) ? plugins.entries[PLUGIN_NAME] : {};
+  return { enabled: listed("enabled") && !listed("disabled"), allowed: entry.allow_gateway_injection === true };
+}
+
+// Hermes owns plugins.enabled and plugins.entries, so they change through its own CLI. Without it, or when it
+// fails, the log names the commands to run.
+function runHermes(ctx: InstallContext, home: string, steps: string[][], unless: string): void {
+  if (steps.length === 0) return;
+  const shown = (args: string[]): string => `\`${process.env.HERMES_HOME?.trim() ? `HERMES_HOME=${home} ` : ""}hermes ${args.join(" ")}\``;
+  if (ctx.dryRun) {
+    ctx.log.push(`hermes (dry run): would run ${steps.map(shown).join(", then ")}`);
+    return;
+  }
+  if (!ctx.hasBinary("hermes")) {
+    ctx.log.push(`hermes: the hermes command is not on the PATH; ${unless} run ${steps.map(shown).join(", then ")}`);
+    return;
+  }
+  for (const [i, args] of steps.entries()) {
+    const run = spawnSync("hermes", args, { env: { ...process.env, HERMES_HOME: home }, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", timeout: HERMES_CLI_MS });
+    if (run.status !== 0) {
+      const why = run.error ? `could not run (${run.error.message})` : `exited with ${run.status ?? run.signal}`;
+      ctx.log.push(`hermes: ${shown(args)} ${why}; ${unless} run ${steps.slice(i).map(shown).join(", then ")}`);
+      return;
+    }
+    ctx.log.push(`hermes: ran ${shown(args)}`);
+  }
+}
+
+function writePlugin(ctx: InstallContext, dir: string, files: Record<PluginFile, string>): void {
+  const changed = PLUGIN_FILES.filter((name) => readText(join(dir, name)) !== files[name]);
+  if (changed.length === 0) {
+    ctx.log.push(`hermes: plugin ${dir} already installed, unchanged`);
+  } else if (ctx.dryRun) {
+    ctx.log.push(`hermes (dry run): would write the agentsocks plugin to ${dir}`);
+  } else {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    for (const name of changed) {
+      const path = join(dir, name);
+      if (existsSync(path)) ctx.backup(path);
+      writeAtomic(path, files[name]);
+    }
+    ctx.log.push(`hermes: wrote the agentsocks plugin to ${dir}`);
+  }
+}
+
+function removePlugin(ctx: InstallContext, home: string): void {
+  const dir = pluginDir(home);
+  const ours = PLUGIN_FILES.map((name) => join(dir, name)).filter((path) => isPlugin(readText(path)));
+  if (ours.length === 0) return;
+  const settings = pluginSettings(readText(configFile(home)) ?? "");
+  runHermes(ctx, home, [...(settings?.enabled === false ? [] : [DISABLE]), ...(settings?.allowed === false ? [] : [DISALLOW])], "to take the plugin out of Hermes's config,");
+  if (ctx.dryRun) {
+    ctx.log.push(`hermes (dry run): would remove ${ours.join(", ")}`);
+    return;
+  }
+  for (const path of ours) {
+    ctx.backup(path);
+    unlinkSync(path);
+  }
+  try {
+    if (readdirSync(dir).length === 0) rmdirSync(dir);
+  } catch {}
+  ctx.log.push(`hermes: removed the agentsocks plugin from ${dir}`);
+}
+
+function pluginReport(ctx: InstallContext, home: string, configText: string): { current: boolean; lines: string[] } {
+  const dir = pluginDir(home);
+  const found = PLUGIN_FILES.map((name) => readText(join(dir, name)));
+  if (found.every((text) => text === undefined)) return { current: false, lines: [`the agentsocks plugin is not in ${dir}, so idle chats are not woken; run \`agentsocks install --hermes\``] };
+  if (found.some((text) => text !== undefined && !isPlugin(text))) return { current: false, lines: [`${dir} holds files agentsocks did not write, so the agentsocks plugin is not installed`] };
+  const wanted = wantedPlugin(ctx);
+  if (PLUGIN_FILES.some((name, i) => found[i] !== wanted[name])) return { current: false, lines: [`the agentsocks plugin in ${dir} is incomplete, out of date or points at another agentsocks install; run \`agentsocks install --hermes\``] };
+  const settings = pluginSettings(configText);
+  if (!settings) return { current: true, lines: [`plugin ${dir} is installed; whether Hermes enables it could not be checked without python3 and PyYAML`] };
+  const lines: string[] = [];
+  if (!settings.enabled) lines.push(`the agentsocks plugin is not enabled, so idle chats are not woken; run \`hermes plugins enable ${PLUGIN_NAME}\``);
+  if (!settings.allowed) lines.push(`the agentsocks plugin may not start turns; run \`hermes config set ${INJECTION_KEY} true\``);
+  if (lines.length === 0) lines.push(`plugin ${dir} is enabled and may start turns: a message wakes an idle chat once the plugin has attached it`);
+  return { current: true, lines };
+}
+
 function install(ctx: InstallContext): void {
   const home = hermesHome(ctx);
   const path = configFile(home);
+  const dir = pluginDir(home);
+  for (const name of PLUGIN_FILES) {
+    const text = readText(join(dir, name));
+    if (text !== undefined && !isPlugin(text)) throw new Error(`${join(dir, name)} exists and is not part of the agentsocks plugin; left untouched`);
+  }
   const before = readText(path) ?? "";
   const w = wiring(ctx);
   const edit = addManaged(before, w.plan);
@@ -88,13 +201,18 @@ function install(ctx: InstallContext): void {
     writeAtomic(path, edit.text);
     ctx.log.push(`hermes: wired ${path}: mcp_servers.agentsocks and shell hooks for ${eventsLine}`);
   }
+  writePlugin(ctx, dir, wantedPlugin(ctx));
+  const settings = pluginSettings(ctx.dryRun ? edit.text : (readText(path) ?? ""));
+  runHermes(ctx, home, [...(settings?.allowed ? [] : [ALLOW]), ...(settings?.enabled ? [] : [ENABLE])], "for a message to wake an idle chat,");
   const consent = consentFor(home, edit.text, w.commands);
   if (consent.missing.length > 0) ctx.log.push(`hermes: ${consentInstruction(consent.missing.length)}`);
   ctx.log.push(`hermes: ${describeWake(wakeConfig())}`);
 }
 
 function uninstall(ctx: InstallContext): void {
-  const path = configFile(hermesHome(ctx));
+  const home = hermesHome(ctx);
+  removePlugin(ctx, home);
+  const path = configFile(home);
   const before = readText(path);
   if (before === undefined) return;
   const gone = removeManaged(before);
@@ -150,11 +268,12 @@ function status(ctx: InstallContext): AgentStatus {
     }
   }
   if (present === 0) return { state: "not wired", detail: found.problem ? detail : [] };
-  const wake = describeWake(wakeConfig());
-  if (current < total || found.rescued.length > 0) return { state: "partly wired", detail: [...detail, wake] };
+  const plugin = pluginReport(ctx, home, text);
+  const wake = [...plugin.lines, describeWake(wakeConfig())];
+  if (current < total || found.rescued.length > 0 || !plugin.current) return { state: "partly wired", detail: [...detail, ...wake] };
   const consent = consentFor(home, text, w.commands);
-  if (consent.missing.length > 0) return { state: "partly wired", detail: [consentInstruction(consent.missing.length), ...(consent.problem ? [consent.problem] : []), wake] };
-  return { state: "wired", detail: [wake] };
+  if (consent.missing.length > 0) return { state: "partly wired", detail: [consentInstruction(consent.missing.length), ...(consent.problem ? [consent.problem] : []), ...wake] };
+  return { state: "wired", detail: wake };
 }
 
 export const hermesInstaller: AgentInstaller = {

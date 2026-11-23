@@ -1,8 +1,11 @@
+import { brokerCall } from "../../client.ts";
 import { WAKE_PREFIX } from "../../codexframe.ts";
 import { stampSession } from "../../stamp.ts";
 import { isRecord } from "../files.ts";
 import { agentHookRequest, type AgentHookFields } from "../request.ts";
 import { threadIdFor, type HookRun } from "../types.ts";
+import { sinkId } from "../opencode/sink.ts";
+import { pollWakes } from "../wakepoll.ts";
 import { dropNotice, stashNotice } from "./pending.ts";
 
 const text = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
@@ -17,7 +20,20 @@ async function isOurTool(name: string): Promise<boolean> {
   return toolsFor("codex").some((t) => t.name === tool);
 }
 
+// The plugin ties a chat to its sink through the broker's register op: it records thread.remote and nothing
+// else, so the chat's state, notices and hook bookkeeping are left to the turn hooks.
+async function attach(input: Record<string, unknown>): Promise<string | undefined> {
+  const threadId = threadIdFor("hermes", input.session);
+  const sink = sinkId(input.sink);
+  if (!threadId || !sink) return undefined;
+  const cwd = typeof input.cwd === "string" && input.cwd ? { cwd: input.cwd } : {};
+  await brokerCall("register", { threadId, agent: "hermes", remote: sink, ...cwd }, { timeoutMs: 4000, startWaitMs: 1500 });
+  return JSON.stringify({ attached: true });
+}
+
 export async function hermesHook({ event, input, call }: HookRun): Promise<string | undefined> {
+  if (event === "attach") return attach(input);
+  if (event === "wake") return pollWakes(input);
   const thread = threadIdFor("hermes", input.session_id);
   if (!thread) return undefined;
   const extra = isRecord(input.extra) ? input.extra : {};

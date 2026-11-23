@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import http from "node:http";
 import https from "node:https";
 import { isLocalUrl, readKeyFile } from "../../classifier.ts";
@@ -6,7 +8,10 @@ import { THREAD_ID } from "../../limits.ts";
 import { agentsocksEnvPath, configPath, expandHome } from "../../paths.ts";
 import { VERSION } from "../../version.ts";
 import { isRecord } from "../files.ts";
-import type { WakeOutcome } from "../types.ts";
+import { offerWake, sinkId } from "../opencode/sink.ts";
+import type { WakeRequest, WakeOutcome } from "../types.ts";
+import { hermesHome } from "./config.ts";
+import { PLUGIN_MARKER, PLUGIN_NAME } from "./plugin.ts";
 
 export const KEY_VARIABLE = "HERMES_API_SERVER_KEY";
 const HERMES_OWN_VARIABLE = "API_SERVER_KEY";
@@ -58,8 +63,21 @@ export function wakeConfig(path = configPath()): WakeConfig {
 // other with permission_denied, HTTP 409). So the API wake reaches API-created sessions and nothing else.
 export const HERMES_API_WAKE_REACH =
   "the Hermes API wake reaches only sessions created through Hermes's API server; Hermes 0.23 refuses it (HTTP 409) for CLI, TUI and Desktop sessions, which wait for their next turn";
+export const NO_PLUGIN = "no agentsocks Hermes plugin is listening for this session";
 export const HERMES_NO_WAKE =
-  "A message waits until the session's next turn, when the pre_llm_call hook announces it. Hermes 0.23 gives an outside program no way to start a turn in a CLI, TUI or Desktop session through its API server; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
+  "No agentsocks Hermes plugin is listening for them, so a message waits until the next turn. Run `agentsocks install --hermes`, then open the chat or send it a turn so the plugin attaches it; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
+
+export const pluginDir = (home: string): string => join(home, "plugins", PLUGIN_NAME);
+
+// Whether the plugin agentsocks writes is in the Hermes home this process sees. It says a wake can be tried;
+// whether one reaches a chat is the chat's own fact (its thread.remote names a sink that is polling).
+export function pluginInstalled(env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    return readFileSync(join(pluginDir(hermesHome({ home: homedir() }, env)), "__init__.py"), "utf8").startsWith(PLUGIN_MARKER);
+  } catch {
+    return false;
+  }
+}
 
 export function describeWake(config: WakeConfig): string {
   if (config.state === "on") return `API wake on through ${config.base.origin}; ${HERMES_API_WAKE_REACH}`;
@@ -150,12 +168,14 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
 const SESSION = /^hermes_([A-Za-z0-9_-]+)$/;
 
 export const hermesWake = {
-  canWake: (): boolean => wakeConfig().state === "on",
-  wake: async ({ thread, line }: { thread: { thread_id: string }; line: string }): Promise<WakeOutcome> => {
-    const config = wakeConfig();
-    if (config.state !== "on") return { ok: false, detail: config.state === "off" ? "no Hermes API is configured" : config.why };
+  canWake: (): boolean => pluginInstalled() || wakeConfig().state === "on",
+  wake: async ({ broker, thread, line }: WakeRequest): Promise<WakeOutcome> => {
     const session = THREAD_ID.test(thread.thread_id) ? SESSION.exec(thread.thread_id)?.[1] : undefined;
     if (!session) return { ok: false, detail: "not a Hermes session id" };
-    return sendWake(config, session, line);
+    const sink = sinkId(thread.remote);
+    if (sink && offerWake(broker, sink, { session, line, agent: "hermes" })) return { ok: true };
+    const config = wakeConfig();
+    if (config.state === "on") return sendWake(config, session, line);
+    return { ok: false, detail: config.state === "incomplete" ? `${NO_PLUGIN}; ${config.why}` : NO_PLUGIN };
   },
 };
