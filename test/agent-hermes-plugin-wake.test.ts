@@ -25,7 +25,7 @@ const unread = (raw: string): void => {
   const id = `m-${raw}-${++n}`;
   broker.store.enqueue({ id, msg_id: id, to_thread: `hermes_${raw}`, kind: "message", from_addr: encodeAddress(`${root}/cc-socks/ann.sock`), from_name: "ann", from_kind: "claude", from_session: null, from_mode: null, body: BODY, received_at: Date.now(), route: "now", decision: null });
 };
-const idle = (raw: string): void => broker.store.upsertThread(`hermes_${raw}`, { agent: "hermes", state: "idle" }, "hermes-chat");
+const idle = (raw: string) => broker.store.upsertThread(`hermes_${raw}`, { agent: "hermes", state: "idle" }, "hermes-chat");
 const failures = (raw: string): string[] => {
   const file = join(process.env.AGENTSOCKS_STATE_DIR!, "audit.log");
   return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter((l) => l.includes('"event":"wake_failed"') && l.includes(`hermes_${raw}`)) : [];
