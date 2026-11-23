@@ -8,6 +8,5 @@ export const hermesAgent: AgentSpec = {
   live: "untested",
   hook: hermesHook,
   wake: hermesWake.wake,
-  canWake: hermesWake.canWake,
   installer: hermesInstaller,
 };

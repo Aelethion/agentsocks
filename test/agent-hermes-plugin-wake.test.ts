@@ -72,6 +72,18 @@ test("a message to an idle chat attached to a polling sink is a wake on that sin
   assert.deepEqual(failures(chat), []);
 });
 
+test("the released OMP extension's omp_wake_wait is the same long poll as wake_wait", async () => {
+  const chat = session();
+  await run("attach", { session: chat, sink: SINK });
+  await run("wake", { sink: SINK, timeoutMs: 0 });
+  idle(chat);
+  unread(chat);
+  await broker.wake(`hermes_${chat}`, Date.now() + 5000);
+  const conn = { isClosed: () => false, onClose: () => {} };
+  const reply = await broker.dispatch({ op: "omp_wake_wait", sink: SINK, timeoutMs: 0 }, conn);
+  assert.deepEqual(reply.result, { wakes: [{ session: chat, line: LINE, agent: "hermes" }] });
+});
+
 test("a long poll that is already waiting gets the wake as soon as it is offered", async () => {
   const chat = session();
   await run("attach", { session: chat, sink: OTHER_SINK });

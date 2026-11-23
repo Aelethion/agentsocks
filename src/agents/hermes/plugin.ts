@@ -5,7 +5,7 @@ export const PLUGIN_NAME = "agentsocks";
 export const PLUGIN_MARKER = "# agentsocks:managed hermes-plugin";
 export const PLUGIN_FILES = ["plugin.yaml", "__init__.py"] as const;
 export type PluginFile = (typeof PLUGIN_FILES)[number];
-export const PLUGIN_HOOKS = ["on_session_start", "on_session_open", "pre_llm_call"] as const;
+export const PLUGIN_HOOKS = ["on_session_start", "on_session_open", "on_session_end", "pre_llm_call"] as const;
 
 export interface PluginSpec {
   node: string;
@@ -121,11 +121,27 @@ class Bridge:
 
     def hook(self, **kwargs):
         """Every registered hook: attach a chat the first time this process sees its id, off the turn's thread."""
+        return self.touch(False, kwargs)
+
+    def opened(self, **kwargs):
+        """on_session_open: Hermes opened the chat, so attach it even if this process held it before."""
+        return self.touch(True, kwargs)
+
+    def ended(self, **kwargs):
+        """on_session_end: agentsocks marks the thread ended, so forget the chat until it is attached again."""
+        session = kwargs.get("session_id")
+        if isinstance(session, str):
+            with self.lock:
+                self.claimed.discard(session)
+                self.attached.discard(session)
+        return None
+
+    def touch(self, force, kwargs):
         session = kwargs.get("session_id")
         if self.stopped.is_set() or not isinstance(session, str) or not SESSION.match(session):
             return None
         with self.lock:
-            if session in self.claimed:
+            if session in self.claimed and not force:
                 return None
             self.claimed.add(session)
         payload = {"session": session, "sink": self.sink}
@@ -143,7 +159,8 @@ class Bridge:
         reply = _parse(self.run("attach", payload, ATTACH_TIMEOUT))
         with self.lock:
             if reply is not None and reply.get("attached") is True:
-                self.attached.add(payload["session"])
+                if payload["session"] in self.claimed:
+                    self.attached.add(payload["session"])
                 self.ready.set()
             else:
                 self.claimed.discard(payload["session"])
@@ -200,7 +217,7 @@ def register(ctx):
 
     bridge = Bridge(ctx, spawn_context_thread)
     for name in HOOKS:
-        ctx.register_hook(name, bridge.hook)
+        ctx.register_hook(name, {"on_session_open": bridge.opened, "on_session_end": bridge.ended}.get(name, bridge.hook))
     ctx.on_unload(bridge.close)
     spawn_context_thread(bridge.poll, name="agentsocks-wake", daemon=True).start()
 `;

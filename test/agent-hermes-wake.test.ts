@@ -116,16 +116,14 @@ test("a base path in the URL, such as a profile prefix, is kept", async () => {
   assert.equal(seen[0]!.url, `/p/work/api/sessions/${id.slice("hermes_".length)}/chat`);
 });
 
-test("without a configured URL, or with a URL and no key, nothing is sent and no failure is recorded: Hermes stays pull only", async () => {
+test("without a configured URL, or with a URL and no key, nothing is sent: one failed wake is recorded and the broker backs off, and Hermes stays pull only", async () => {
   const id = await idleThreadWithMessage();
-  const failures = audit("wake_failed").length;
-  assert.equal(hermesAgent.canWake?.(), false);
-  await broker.wake(id, Date.now() + 5000);
+  const at = Date.now() + 5000;
+  await broker.wake(id, at);
   writeConfig({ apiUrl: `http://127.0.0.1:${port}` });
-  assert.equal(hermesAgent.canWake?.(), false);
-  await broker.wake(id, Date.now() + 5000);
+  await broker.wake(id, at + 100);
   assert.equal(seen.length, 0);
-  assert.equal(audit("wake_failed").length, failures);
+  assert.equal(audit("wake_failed").filter((l) => l.includes(id)).length, 1);
   assert.equal(broker.store.getThread(id)!.pending_wake_at, null);
 });
 

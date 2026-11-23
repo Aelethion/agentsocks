@@ -138,6 +138,30 @@ until(lambda: len(warnings) >= 1)
 report["injected"] = list(ctx.injected)
 report["warnings"] = len(warnings)
 
+# A chat Hermes ends (eviction, teardown) is dropped; opening it again attaches it afresh, and a wake for an ended chat goes nowhere.
+ctx.accept = True
+D = "20261123_141500_dddddd"
+fire("on_session_open", session_id=D, platform="desktop", reason="open")
+until(lambda: len(attaches(D)) == 1)
+fire("on_session_end", session_id=D, completed=True, interrupted=False)
+time.sleep(0.2)
+injected_before = len(ctx.injected)
+open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": [{"session": D, "line": line}]}))
+until(lambda: not os.path.exists(os.path.join(box, "wakes.json")))
+time.sleep(0.5)
+report["ended_injected"] = len(ctx.injected) - injected_before
+fire("on_session_open", session_id=D, platform="desktop", reason="open")
+until(lambda: len(attaches(D)) == 2)
+time.sleep(0.2)
+report["attach_D"] = len(attaches(D))
+open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": [{"session": D, "line": line}]}))
+until(lambda: len(ctx.injected) > injected_before)
+report["reopened_injected"] = len(ctx.injected) - injected_before
+fire("on_session_open", session_id=D, platform="desktop", reason="open")
+until(lambda: len(attaches(D)) == 3)
+time.sleep(0.2)
+report["attach_D_after_second_open"] = len(attaches(D))
+
 report["sinks"] = sorted({c["payload"]["sink"] for c in calls()})
 report["poll_timeouts"] = sorted({c["payload"].get("timeoutMs") for c in calls("wake")})
 report["argv"] = sorted({" ".join(c["argv"][:3]) for c in calls()})
@@ -178,7 +202,7 @@ test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat on
   const run = spawnSync(python, ["-I", join(dir, "driver.py"), stubs, plugins, box, LINE], { encoding: "utf8", timeout: 55_000, env: { ...process.env, AGENTSOCKS_FAKE_DIR: box } });
   assert.equal(run.status, 0, run.stderr);
   const r = JSON.parse(run.stdout) as Record<string, unknown>;
-  assert.deepEqual(r.hooks, ["on_session_open", "on_session_start", "pre_llm_call"]);
+  assert.deepEqual(r.hooks, ["on_session_end", "on_session_open", "on_session_start", "pre_llm_call"]);
   assert.ok((r.returns as unknown[]).every((v) => v === null), "no hook adds context or blocks anything");
   assert.equal(r.attach_A, 1, "three hooks and a later turn of one chat attach it once");
   assert.equal(r.attach_B, 1);
@@ -187,6 +211,10 @@ test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat on
   assert.ok((r.hook_seconds as number) < 0.5, `a hook waited ${String(r.hook_seconds)} s for a slow attach`);
   assert.equal(r.attach_C, 2, "a failed attach is tried again at the chat's next hook");
   assert.deepEqual(r.injected, [[LINE, "user", "20261123_101500_aaaaaa"], [LINE, "user", "20261123_111500_a2a2a2"]], "only the notice line, to the chat it names, and only for chats this process attached");
+  assert.equal(r.ended_injected, 0, "a wake for a chat Hermes ended and nobody reopened is not injected");
+  assert.equal(r.attach_D, 2, "ending a chat and opening it again attaches it again");
+  assert.equal(r.reopened_injected, 1, "the reopened chat is woken");
+  assert.equal(r.attach_D_after_second_open, 3, "an open always re-attaches, even for a chat this process already holds");
   assert.equal(r.warnings, 1, "an injection Hermes refuses is logged");
   assert.equal((r.sinks as string[]).length, 1);
   assert.match((r.sinks as string[])[0]!, /^hermes-[0-9a-f]{16}$/);

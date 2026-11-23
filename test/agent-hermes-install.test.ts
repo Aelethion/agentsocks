@@ -341,6 +341,5 @@ test("the registry's Hermes entry is this module, with the API wake wired in and
   assert.equal(spec, hermesAgent);
   assert.equal(spec.live, "untested");
   assert.equal(typeof spec.wake, "function");
-  assert.equal(spec.canWake?.(), false, "without a configured Hermes API there is nothing to wake through");
   assert.ok(agentReports().some((r) => r.id === "hermes"));
 });

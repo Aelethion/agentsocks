@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import http from "node:http";
 import https from "node:https";
@@ -10,8 +9,7 @@ import { VERSION } from "../../version.ts";
 import { isRecord } from "../files.ts";
 import { offerWake, sinkId } from "../opencode/sink.ts";
 import type { WakeRequest, WakeOutcome } from "../types.ts";
-import { hermesHome } from "./config.ts";
-import { PLUGIN_MARKER, PLUGIN_NAME } from "./plugin.ts";
+import { PLUGIN_NAME } from "./plugin.ts";
 
 export const KEY_VARIABLE = "HERMES_API_SERVER_KEY";
 const HERMES_OWN_VARIABLE = "API_SERVER_KEY";
@@ -68,16 +66,6 @@ export const HERMES_NO_WAKE =
   "No agentsocks Hermes plugin is listening for them, so a message waits until the next turn. Run `agentsocks install --hermes`, then open the chat or send it a turn so the plugin attaches it; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
 
 export const pluginDir = (home: string): string => join(home, "plugins", PLUGIN_NAME);
-
-// Whether the plugin agentsocks writes is in the Hermes home this process sees. It says a wake can be tried;
-// whether one reaches a chat is the chat's own fact (its thread.remote names a sink that is polling).
-export function pluginInstalled(env: NodeJS.ProcessEnv = process.env): boolean {
-  try {
-    return readFileSync(join(pluginDir(hermesHome({ home: homedir() }, env)), "__init__.py"), "utf8").startsWith(PLUGIN_MARKER);
-  } catch {
-    return false;
-  }
-}
 
 export function describeWake(config: WakeConfig): string {
   if (config.state === "on") return `API wake on through ${config.base.origin}; ${HERMES_API_WAKE_REACH}`;
@@ -168,7 +156,6 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
 const SESSION = /^hermes_([A-Za-z0-9_-]+)$/;
 
 export const hermesWake = {
-  canWake: (): boolean => pluginInstalled() || wakeConfig().state === "on",
   wake: async ({ broker, thread, line }: WakeRequest): Promise<WakeOutcome> => {
     const session = THREAD_ID.test(thread.thread_id) ? SESSION.exec(thread.thread_id)?.[1] : undefined;
     if (!session) return { ok: false, detail: "not a Hermes session id" };
