@@ -179,7 +179,7 @@ Hermes, Cursor, Copilot CLI and Gemini CLI do not say which session made an MCP 
 
 #### Waking an idle Hermes session
 
-Checked against the Hermes 0.23.3 source for Desktop chats hosted by `hermes serve`. It has not been run against a live Hermes yet.
+Checked against the Hermes 0.23.3 source, and run live against Hermes Desktop on a `hermes serve` backend reached over SSH.
 
 `agentsocks install --hermes` also writes a small Hermes plugin to `<HERMES_HOME>/plugins/agentsocks/`: `plugin.yaml` and `__init__.py`, each marked as written by agentsocks and readable by your user only. It then runs two Hermes commands:
 
@@ -188,20 +188,22 @@ hermes config set plugins.entries.agentsocks.allow_gateway_injection true   # le
 hermes plugins enable agentsocks                                            # loads it, also into a running hermes serve
 ```
 
+When install rewrites a plugin that is already enabled, it runs `hermes plugins disable agentsocks` and then `enable` again, so a running Hermes loads the new copy. The new copy stops the one it replaces.
+
 If `hermes` is not on the PATH, or either command fails, install prints the commands for you to run. `agentsocks doctor` says whether the plugin is in place, enabled and allowed to start turns.
 
-- **Attaching.** The plugin attaches a chat the first time its Hermes process sees it: when the chat opens, when its session starts, or at its next turn. A chat that was open before the plugin was enabled is attached at its next open or turn. When compression gives a chat a new session id, the new id is attached too.
-- **Waking.** One background thread in the plugin waits on the agentsocks broker. When a message arrives for an idle attached chat, the broker gives the plugin the one-line notice for that chat only, and the plugin hands it to Hermes (`ctx.inject_message`), which starts a turn there. The `pre_llm_call` hook recognises the line, so the message is not announced twice.
+- **Attaching.** The plugin attaches a chat the first time its Hermes process sees it: when the chat opens, when its session starts, at its next turn, or when a wake reaches it. When compression gives a chat a new session id, the new id is attached too. Hermes calls `on_session_end` after every turn, so the plugin lets a chat go only at `on_session_finalize`.
+- **Waking.** One background thread in the plugin waits on the agentsocks broker from the moment the plugin loads. When a message arrives for an idle chat, the broker gives the one-line notice for that chat to the plugin that attached it. A chat no plugin has attached yet, such as one open before the plugin loaded, is offered to every plugin that is polling, and Hermes starts a turn only in the process that holds the chat (`ctx.inject_message` refuses the others). The `pre_llm_call` hook recognises the line, so the message is not announced twice.
 - **What you see.** The notice shows in the chat as a user message, for example `📨 agentsocks: new message from a Claude Code session. Read it with read_inbox.` It holds a count and a sender kind, never message text. The model reads the message itself with `read_inbox`.
 - **Cost.** Each wake is a full model turn. Wakes are debounced and capped per hour, as for every agent.
 - **Reopening and the classic REPL.** After the plugin is reloaded, an open chat is re-attached at its next hook, and a chat Hermes ended is attached again when it is reopened. In the classic `hermes` REPL (not Desktop or the TUI) Hermes ignores the session key, so the wake lands in the REPL's current chat.
 - **A busy chat** is not interrupted. Hermes queues the line until the turn ends, and the hook announces new messages at the next turn anyway.
-- **A chat no plugin has attached** is not woken. The broker records a failed wake with the reason, and the message waits in the inbox for the next turn. `agentsocks doctor` prints a `warn:` line naming each Hermes chat that no plugin can wake.
+- **No plugin polling.** When no Hermes process has the plugin loaded, nothing is woken. The broker records a failed wake with the reason, and the message waits in the inbox for the next turn. `agentsocks doctor` prints a `warn:` line naming each Hermes chat that no plugin can wake.
 - **Where it runs.** The plugin calls the agentsocks CLI on the machine where the Hermes backend runs. A Desktop window over SSH is woken only when agentsocks is installed on that remote machine.
 
 To turn wakes off and keep everything else, run `hermes plugins disable agentsocks`. `agentsocks uninstall` disables the plugin, removes the `allow_gateway_injection` grant through Hermes's CLI and deletes only the plugin files that carry the agentsocks marker.
 
-**The API wake.** Before the plugin, the only route was Hermes's API server, and it is still tried when no plugin is listening for a chat. Hermes 0.23 starts an API turn only in a session the API server itself created; it answers a CLI, TUI or Desktop session with HTTP 409, which is recorded as a failed wake. To switch it on, start Hermes's API server bound to this machine with a key, then tell agentsocks where it is:
+**The API wake.** Before the plugin, the only route was Hermes's API server, and it is still tried when no plugin is polling. Hermes 0.23 starts an API turn only in a session the API server itself created; it answers a CLI, TUI or Desktop session with HTTP 409, which is recorded as a failed wake. To switch it on, start Hermes's API server bound to this machine with a key, then tell agentsocks where it is:
 
 ```bash
 # ~/.hermes/.env (or the same settings under gateway.platforms.api_server in config.yaml, which win over .env)

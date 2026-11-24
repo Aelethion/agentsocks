@@ -97,10 +97,12 @@ test("HERMES_HOME moves the plugin and is the home the Hermes commands are given
   assert.deepEqual(ran(), [`${elsewhere}|${ALLOW}`, `${elsewhere}|${ENABLE}`]);
 });
 
-test("a config that already enables the plugin and allows injection runs no Hermes command", { skip: !hasPyYaml }, () => {
+test("a config that already enables the plugin reloads it when install rewrites it, and runs no Hermes command when nothing changed", { skip: !hasPyYaml }, () => {
   seed(ENABLED);
   installer.install(rig().ctx);
-  assert.deepEqual(ran(), []);
+  assert.deepEqual(ran(), [`${hermes()}|${DISABLE}`, `${hermes()}|${ENABLE}`], "a running Hermes loads the new plugin");
+  installer.install(rig().ctx);
+  assert.equal(ran().length, 2, "an unchanged plugin is not reloaded");
   const s = installer.status(rig().ctx);
   assert.match(s.detail.join("; "), /is enabled and may start turns/);
 });

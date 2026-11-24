@@ -42,6 +42,9 @@ export const sinkOf = (broker: Broker, id: string): Sink | undefined => sinksOf(
 
 export const listening = (sink: Sink, now: number): boolean => sink.waiting !== undefined || now - sink.seenAt <= LISTEN_WINDOW_MS;
 
+export const listeningSinks = (broker: Broker, prefix: string, now: number = Date.now()): string[] =>
+  [...sinksOf(broker)].filter(([id, sink]) => id.startsWith(prefix) && listening(sink, now)).map(([id]) => id);
+
 const alive = (broker: Broker, wake: Wake): boolean => {
   const id = threadIdFor(wake.agent ?? "opencode", wake.session);
   const thread = id ? broker.store.getThread(id) : undefined;
@@ -78,8 +81,12 @@ export function pollSink(broker: Broker, id: string, timeoutMs: number, conn: Co
   const limit = pollLimit(timeoutMs);
   if (ready.length > 0 || limit === 0 || conn.isClosed()) return Promise.resolve(ready);
   return new Promise<Wake[]>((resolve) => {
+    let finished = false;
     const waiting: Waiting = {
+      // A poll ends once; a connection that closes after its wake was handed over does not count as a new poll.
       finish: (wakes = []) => {
+        if (finished) return;
+        finished = true;
         clearTimeout(timer);
         if (sink.waiting === waiting) sink.waiting = undefined;
         sink.seenAt = Date.now();

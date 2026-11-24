@@ -51,7 +51,7 @@ import { processArgs, buildHash } from "./procinfo.ts";
 import { findCodexThread, permissionModeFromApproval } from "./codexstate.ts";
 import { SWEEP_STAGES, type SweepStage } from "./sweep/index.ts";
 import { OPS } from "./brokerops/index.ts";
-import { listening, sinkId, sinkOf } from "./agents/opencode/sink.ts";
+import { listening, listeningSinks, sinkId, sinkOf } from "./agents/opencode/sink.ts";
 import { livePeerNames, normalizeSessionName, sanitizeSessionName, sessionNameRefusal } from "./brokerops/threads.ts";
 import { AGENTS, agentOfThreadId, agentSpec, type AgentId, type AgentSpec } from "./agents/index.ts";
 import type { Conn, Reply, OpRequest } from "./brokerops/types.ts";
@@ -520,7 +520,7 @@ export class Broker {
   describe(t: ThreadRow) {
     const driver = driverOfThread(this.store, t);
     const sink = t.agent === "codex" ? undefined : sinkOf(this, sinkId(t.remote) ?? "");
-    const listened = sink !== undefined && listening(sink, Date.now());
+    const listened = (sink !== undefined && listening(sink, Date.now())) || (t.agent === "hermes" && listeningSinks(this, "hermes-").length > 0);
     return {
       threadId: t.thread_id,
       name: cleanText(t.name, 64),
@@ -568,7 +568,13 @@ export class Broker {
     if (info.cwd) fields.cwd = info.cwd;
     const mode = modeFromCodex(info.permissionMode);
     if (mode) fields.mode = mode;
-    if (info.remote) fields.remote = info.remote;
+    if (info.remote) {
+      // A plugin attaching a session is listening from now on: earlier failed or undelivered wakes no longer apply.
+      fields.remote = info.remote;
+      fields.pending_wake_at = null;
+      this.wakeFailures.delete(threadId);
+      this.scheduleWake(threadId);
+    }
     if (info.state) fields.state = info.state;
     if (subagent !== undefined) fields.subagent = subagent ? 1 : 0;
     if (existing ? existing.agent !== agent : agent !== "codex") fields.agent = agent;

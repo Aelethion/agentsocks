@@ -123,7 +123,7 @@ function runHermes(ctx: InstallContext, home: string, steps: string[][], unless:
   }
 }
 
-function writePlugin(ctx: InstallContext, dir: string, files: Record<PluginFile, string>): void {
+function writePlugin(ctx: InstallContext, dir: string, files: Record<PluginFile, string>): boolean {
   const changed = PLUGIN_FILES.filter((name) => readText(join(dir, name)) !== files[name]);
   if (changed.length === 0) {
     ctx.log.push(`hermes: plugin ${dir} already installed, unchanged`);
@@ -138,6 +138,7 @@ function writePlugin(ctx: InstallContext, dir: string, files: Record<PluginFile,
     }
     ctx.log.push(`hermes: wrote the agentsocks plugin to ${dir}`);
   }
+  return changed.length > 0;
 }
 
 function removePlugin(ctx: InstallContext, home: string): void {
@@ -172,7 +173,7 @@ function pluginReport(ctx: InstallContext, home: string, configText: string): { 
   const lines: string[] = [];
   if (!settings.enabled) lines.push(`the agentsocks plugin is not enabled, so idle chats are not woken; run \`hermes plugins enable ${PLUGIN_NAME}\``);
   if (!settings.allowed) lines.push(`the agentsocks plugin may not start turns; run \`hermes config set ${INJECTION_KEY} true\``);
-  if (lines.length === 0) lines.push(`plugin ${dir} is enabled and may start turns: a message wakes an idle chat once the plugin has attached it`);
+  if (lines.length === 0) lines.push(`plugin ${dir} is enabled and may start turns: a message wakes an idle chat open in a running Hermes`);
   return { current: true, lines };
 }
 
@@ -201,12 +202,15 @@ function install(ctx: InstallContext): void {
     writeAtomic(path, edit.text);
     ctx.log.push(`hermes: wired ${path}: mcp_servers.agentsocks and shell hooks for ${eventsLine}`);
   }
-  writePlugin(ctx, dir, wantedPlugin(ctx));
+  const rewrote = writePlugin(ctx, dir, wantedPlugin(ctx));
   const settings = pluginSettings(ctx.dryRun ? edit.text : (readText(path) ?? ""));
-  runHermes(ctx, home, [...(settings?.allowed ? [] : [ALLOW]), ...(settings?.enabled ? [] : [ENABLE])], "for a message to wake an idle chat,");
+  // A running Hermes keeps the plugin it loaded; disabling and enabling it again loads the new copy.
+  const load = settings?.enabled ? (rewrote ? [DISABLE, ENABLE] : []) : [ENABLE];
+  runHermes(ctx, home, [...(settings?.allowed ? [] : [ALLOW]), ...load], "for a message to wake an idle chat,");
   const consent = consentFor(home, edit.text, w.commands);
   if (consent.missing.length > 0) ctx.log.push(`hermes: ${consentInstruction(consent.missing.length)}`);
-  ctx.log.push(`hermes: ${describeWake(wakeConfig())}`);
+  const api = describeWake(wakeConfig());
+  if (api) ctx.log.push(`hermes: ${api}`);
 }
 
 function uninstall(ctx: InstallContext): void {
@@ -269,7 +273,8 @@ function status(ctx: InstallContext): AgentStatus {
   }
   if (present === 0) return { state: "not wired", detail: found.problem ? detail : [] };
   const plugin = pluginReport(ctx, home, text);
-  const wake = [...plugin.lines, describeWake(wakeConfig())];
+  const api = describeWake(wakeConfig());
+  const wake = api ? [...plugin.lines, api] : plugin.lines;
   if (current < total || found.rescued.length > 0 || !plugin.current) return { state: "partly wired", detail: [...detail, ...wake] };
   const consent = consentFor(home, text, w.commands);
   if (consent.missing.length > 0) return { state: "partly wired", detail: [consentInstruction(consent.missing.length), ...(consent.problem ? [consent.problem] : []), ...wake] };

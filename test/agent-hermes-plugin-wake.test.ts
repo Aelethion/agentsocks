@@ -7,6 +7,7 @@ import { Broker, type HookRequest, type HookResult } from "../src/broker.ts";
 import { hermesAgent } from "../src/agents/hermes.ts";
 import { PLUGIN_MARKER } from "../src/agents/hermes/plugin.ts";
 import { NO_PLUGIN } from "../src/agents/hermes/wake.ts";
+import { sinkOf } from "../src/agents/opencode/sink.ts";
 import { encodeAddress } from "../src/envelope.ts";
 import { root } from "./support.ts";
 
@@ -26,6 +27,13 @@ const unread = (raw: string): void => {
   broker.store.enqueue({ id, msg_id: id, to_thread: `hermes_${raw}`, kind: "message", from_addr: encodeAddress(`${root}/cc-socks/ann.sock`), from_name: "ann", from_kind: "claude", from_session: null, from_mode: null, body: BODY, received_at: Date.now(), route: "now", decision: null });
 };
 const idle = (raw: string) => broker.store.upsertThread(`hermes_${raw}`, { agent: "hermes", state: "idle" }, "hermes-chat");
+// Every sink an earlier test polled stops counting as listening, as if its plugin had gone away.
+const silence = (): void => {
+  for (const id of [SINK, OTHER_SINK, "hermes-aaaaaaaaaaaaaaaa", "hermes-bbbbbbbbbbbbbbbb", "hermes-cccccccccccccccc"]) {
+    const sink = sinkOf(broker, id);
+    if (sink) sink.seenAt = 0;
+  }
+};
 const failures = (raw: string): string[] => {
   const file = join(process.env.AGENTSOCKS_STATE_DIR!, "audit.log");
   return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter((l) => l.includes('"event":"wake_failed"') && l.includes(`hermes_${raw}`)) : [];
@@ -95,7 +103,8 @@ test("a long poll that is already waiting gets the wake as soon as it is offered
   assert.equal(await pending, JSON.stringify({ wakes: [{ session: chat, line: LINE }] }));
 });
 
-test("a chat no plugin has attached is not woken: the wake fails naming the missing plugin, and the message still waits in the inbox", async () => {
+test("with no plugin polling, a chat is not woken: the wake fails naming the missing plugin, and the message still waits in the inbox", async () => {
+  silence();
   const raw = session();
   idle(raw);
   unread(raw);
@@ -108,6 +117,7 @@ test("a chat no plugin has attached is not woken: the wake fails naming the miss
 });
 
 test("a chat attached to a sink nobody polls any more is not woken either", async () => {
+  silence();
   const raw = session();
   await run("attach", { session: raw, sink: "hermes-aaaaaaaaaaaaaaaa" });
   idle(raw);
@@ -116,13 +126,69 @@ test("a chat attached to a sink nobody polls any more is not woken either", asyn
   assert.ok(failures(raw)[0]?.includes(NO_PLUGIN));
 });
 
-test("the thread list says which chats a polling plugin can wake, which is what doctor reads", async () => {
-  const heard = session();
-  const deaf = session();
-  await run("attach", { session: heard, sink: SINK });
+test("a chat no plugin has attached is offered to every polling plugin, since Hermes starts the turn only in the process that holds it", async () => {
+  silence();
+  const raw = session();
   await run("wake", { sink: SINK, timeoutMs: 0 });
-  idle(deaf);
-  const list = (await broker.dispatch({ op: "list_threads" })).result as { threadId: string; wakeListening?: boolean }[];
-  assert.equal(list.find((t) => t.threadId === `hermes_${heard}`)?.wakeListening, true);
-  assert.equal(list.find((t) => t.threadId === `hermes_${deaf}`)?.wakeListening, undefined);
+  await run("wake", { sink: OTHER_SINK, timeoutMs: 0 });
+  idle(raw);
+  unread(raw);
+  await broker.wake(`hermes_${raw}`, Date.now() + 5000);
+  for (const sink of [SINK, OTHER_SINK]) assert.equal(await run("wake", { sink, timeoutMs: 0 }), JSON.stringify({ wakes: [{ session: raw, line: LINE }] }));
+  assert.deepEqual(failures(raw), []);
+});
+
+test("the thread list says a Hermes chat can be woken while any plugin polls, and not once none does, which is what doctor reads", async () => {
+  silence();
+  const heard = session();
+  const unattached = session();
+  idle(unattached);
+  const listened = async (raw: string): Promise<boolean | undefined> =>
+    ((await broker.dispatch({ op: "list_threads" })).result as { threadId: string; wakeListening?: boolean }[]).find((t) => t.threadId === `hermes_${raw}`)?.wakeListening;
+  await run("attach", { session: heard, sink: SINK });
+  assert.equal(await listened(unattached), undefined);
+  await run("wake", { sink: SINK, timeoutMs: 0 });
+  assert.equal(await listened(heard), true);
+  assert.equal(await listened(unattached), true);
+  silence();
+  assert.equal(await listened(heard), undefined);
+});
+
+test("a chat attached again after its plugin was away is woken at once, not after the backoff its failed wakes earned", async () => {
+  const chat = session();
+  const gone = "hermes-aaaaaaaaaaaaaaaa";
+  const back = "hermes-bbbbbbbbbbbbbbbb";
+  silence();
+  await run("attach", { session: chat, sink: gone });
+  idle(chat);
+  unread(chat);
+  const now = Date.now() + 5000;
+  await broker.wake(`hermes_${chat}`, now);
+  assert.equal(failures(chat).length, 1, "nobody polls the first sink, so the wake fails and backs off");
+  await run("wake", { sink: back, timeoutMs: 0 });
+  await run("attach", { session: chat, sink: back });
+  idle(chat);
+  await broker.wake(`hermes_${chat}`, now + 1000);
+  assert.equal(await run("wake", { sink: back, timeoutMs: 0 }), JSON.stringify({ wakes: [{ session: chat, line: LINE }] }));
+  assert.equal(failures(chat).length, 1);
+});
+
+test("a wake handed to a plugin that never delivered it does not hold the chat once a plugin attaches it again", async () => {
+  silence();
+  const chat = session();
+  const stale = "hermes-cccccccccccccccc";
+  const fresh = "hermes-bbbbbbbbbbbbbbbb";
+  await run("wake", { sink: stale, timeoutMs: 0 });
+  await run("attach", { session: chat, sink: stale });
+  idle(chat);
+  unread(chat);
+  const now = Date.now() + 5000;
+  await broker.wake(`hermes_${chat}`, now);
+  assert.notEqual(thread(chat)!.pending_wake_at, null, "the stale plugin took the wake and the chat now waits for it to be read");
+  silence();
+  await run("wake", { sink: fresh, timeoutMs: 0 });
+  await run("attach", { session: chat, sink: fresh });
+  idle(chat);
+  await broker.wake(`hermes_${chat}`, now + 1000);
+  assert.equal(await run("wake", { sink: fresh, timeoutMs: 0 }), JSON.stringify({ wakes: [{ session: chat, line: LINE }] }));
 });

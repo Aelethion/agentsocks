@@ -7,7 +7,7 @@ import { THREAD_ID } from "../../limits.ts";
 import { agentsocksEnvPath, configPath, expandHome } from "../../paths.ts";
 import { VERSION } from "../../version.ts";
 import { isRecord } from "../files.ts";
-import { offerWake, sinkId } from "../opencode/sink.ts";
+import { listeningSinks, offerWake, sinkId } from "../opencode/sink.ts";
 import type { WakeRequest, WakeOutcome } from "../types.ts";
 import { PLUGIN_NAME } from "./plugin.ts";
 
@@ -63,14 +63,15 @@ export const HERMES_API_WAKE_REACH =
   "the Hermes API wake reaches only sessions created through Hermes's API server; Hermes 0.23 refuses it (HTTP 409) for CLI, TUI and Desktop sessions, which wait for their next turn";
 export const NO_PLUGIN = "no agentsocks Hermes plugin is listening for this session";
 export const HERMES_NO_WAKE =
-  "No agentsocks Hermes plugin is listening for them, so a message waits until the next turn. Run `agentsocks install --hermes`, then open the chat or send it a turn so the plugin attaches it; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
+  "No agentsocks Hermes plugin is polling, so a message waits until the next turn. Run `agentsocks install --hermes` and keep Hermes running with the chat open; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
 
 export const pluginDir = (home: string): string => join(home, "plugins", PLUGIN_NAME);
 
-export function describeWake(config: WakeConfig): string {
+// The plugin wakes CLI, TUI and Desktop chats; the API wake is an optional extra, so leaving it off says nothing.
+export function describeWake(config: WakeConfig): string | undefined {
   if (config.state === "on") return `API wake on through ${config.base.origin}; ${HERMES_API_WAKE_REACH}`;
   if (config.state === "incomplete") return `API wake is not active: ${config.why}`;
-  return "no API wake configured, so a message waits until Hermes reads it at its next turn (pull only)";
+  return undefined;
 }
 
 export interface WakeLimits {
@@ -161,6 +162,10 @@ export const hermesWake = {
     if (!session) return { ok: false, detail: "not a Hermes session id" };
     const sink = sinkId(thread.remote);
     if (sink && offerWake(broker, sink, { session, line, agent: "hermes" })) return { ok: true };
+    // A chat no plugin has attached yet may still be open in a backend: every listening plugin is offered it,
+    // and Hermes starts a turn only in the backend that holds that chat.
+    const offered = listeningSinks(broker, "hermes-").filter((id) => id !== sink).map((id) => offerWake(broker, id, { session, line, agent: "hermes" }));
+    if (offered.includes(true)) return { ok: true };
     const config = wakeConfig();
     if (config.state === "on") return sendWake(config, session, line);
     return { ok: false, detail: config.state === "incomplete" ? `${NO_PLUGIN}; ${config.why}` : NO_PLUGIN };

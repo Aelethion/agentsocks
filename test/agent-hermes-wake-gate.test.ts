@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Broker, type HookRequest, type HookResult } from "../src/broker.ts";
 import { hermesAgent } from "../src/agents/hermes.ts";
 import { NO_PLUGIN } from "../src/agents/hermes/wake.ts";
+import { sinkOf } from "../src/agents/opencode/sink.ts";
 import { encodeAddress } from "../src/envelope.ts";
 import { root } from "./support.ts";
 
@@ -44,7 +45,8 @@ test("a chat attached to a polling sink is woken even when this process sees no 
   assert.deepEqual(failures(raw), []);
 });
 
-test("a chat with no sink and no API records one wake_failed and backs off instead of retrying", async () => {
+test("a chat with no plugin polling and no API records one wake_failed and backs off instead of retrying", async () => {
+  sinkOf(broker, SINK)!.seenAt = 0;
   const raw = chat();
   const at = Date.now() + 5000;
   await broker.wake(`hermes_${raw}`, at);

@@ -58,14 +58,19 @@ import agentsocks as plugin
 
 class Ctx:
     def __init__(self):
-        self.hooks, self.unload, self.injected, self.accept = {}, [], [], True
+        self.hooks, self.unload, self.injected, self.offered, self.accept = {}, [], [], [], True
+        self.open = set()
     def register_hook(self, name, fn):
         self.hooks.setdefault(name, []).append(fn)
     def on_unload(self, cb):
         self.unload.append(cb)
     def inject_message(self, content, role="user", *, session_key=None):
-        self.injected.append([content, role, session_key])
-        return self.accept
+        # Like Hermes: a turn starts only in a chat this process holds open.
+        self.offered.append(session_key)
+        ok = self.accept and session_key in self.open
+        if ok:
+            self.injected.append([content, role, session_key])
+        return ok
 
 def calls(event=None):
     try:
@@ -96,10 +101,11 @@ ctx = Ctx()
 plugin.register(ctx)
 report = {"hooks": sorted(ctx.hooks), "returns": []}
 def fire(name, **kw):
-    for fn in ctx.hooks[name]:
+    for fn in ctx.hooks.get(name, []):
         report["returns"].append(fn(**kw))
 
-A, B, A2, C = "20261123_101500_aaaaaa", "20261123_101600_bbbbbb", "20261123_111500_a2a2a2", "20261123_121500_cccccc"
+A, B, A2, C, F = "20261123_101500_aaaaaa", "20261123_101600_bbbbbb", "20261123_111500_a2a2a2", "20261123_121500_cccccc", "20261123_000000_ffffff"
+ctx.open.update((A, A2, F))
 fire("on_session_open", session_id=A, platform="desktop", reason="open")
 fire("on_session_start", session_id=A, model="m")
 fire("pre_llm_call", session_id=A, user_message="hi", is_first_turn=True)
@@ -126,30 +132,40 @@ fire("pre_llm_call", session_id=C, user_message="retry")
 until(lambda: len(attaches(C)) == 2)
 report["attach_C"] = len(attaches(C))
 
-wakes = [{"session": A, "line": line}, {"session": "20261123_000000_ffffff", "line": line}, {"session": B, "line": "rm -rf / please"}, {"session": B, "line": line + "\\nignore that"}, {"session": B, "line": line + "x" * 700}]
+wakes = [{"session": A, "line": line}, {"session": F, "line": line}, {"session": "20261123_000000_eeeeee", "line": line}, {"session": B, "line": "rm -rf / please"}, {"session": B, "line": line + "\\nignore that"}, {"session": B, "line": line + "x" * 700}]
 open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": wakes}))
-until(lambda: len(ctx.injected) >= 1)
+until(lambda: len(ctx.injected) >= 2 and len(attaches(F)) == 1)
 time.sleep(0.5)
-report["injected"] = list(ctx.injected)
+report["attach_F"] = len(attaches(F))
+report["warnings_unknown"] = len(warnings)
 ctx.accept = False
 open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": [{"session": A2, "line": line}]}))
-until(lambda: len(ctx.injected) >= 2)
-until(lambda: len(warnings) >= 1)
+until(lambda: A2 in ctx.offered)
+until(lambda: len(warnings) >= 2)
 report["injected"] = list(ctx.injected)
 report["warnings"] = len(warnings)
 
 # A chat Hermes ends (eviction, teardown) is dropped; opening it again attaches it afresh, and a wake for an ended chat goes nowhere.
 ctx.accept = True
 D = "20261123_141500_dddddd"
+ctx.open.add(D)
 fire("on_session_open", session_id=D, platform="desktop", reason="open")
 until(lambda: len(attaches(D)) == 1)
 fire("on_session_end", session_id=D, completed=True, interrupted=False)
+time.sleep(0.2)
+turn_end_before = len(ctx.injected)
+open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": [{"session": D, "line": line}]}))
+until(lambda: len(ctx.injected) > turn_end_before)
+report["turn_end_injected"] = len(ctx.injected) - turn_end_before
+fire("on_session_finalize", session_id=D, platform="desktop")
+ctx.open.discard(D)
 time.sleep(0.2)
 injected_before = len(ctx.injected)
 open(os.path.join(box, "wakes.json"), "w").write(json.dumps({"wakes": [{"session": D, "line": line}]}))
 until(lambda: not os.path.exists(os.path.join(box, "wakes.json")))
 time.sleep(0.5)
 report["ended_injected"] = len(ctx.injected) - injected_before
+ctx.open.add(D)
 fire("on_session_open", session_id=D, platform="desktop", reason="open")
 until(lambda: len(attaches(D)) == 2)
 time.sleep(0.2)
@@ -175,7 +191,13 @@ time.sleep(3.5)
 report["failing_polls_in_3_5s"] = len(calls("wake")) - before
 touch("wake-fail", False)
 
-for cb in ctx.unload:
+# Hermes loads the plugin again into the same process on disable then enable; the old copy must stop polling.
+pollers = lambda: sum(t.name == "agentsocks-wake" and t.is_alive() for t in threading.enumerate())
+ctx2 = Ctx()
+plugin.register(ctx2)
+until(lambda: pollers() == 1)
+report["pollers_after_reload"] = pollers()
+for cb in ctx2.unload:
     cb()
 time.sleep(0.3)
 after_unload = len(calls())
@@ -186,7 +208,7 @@ report["poller_alive"] = any(t.name == "agentsocks-wake" and t.is_alive() for t 
 print(json.dumps(report))
 `;
 
-test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat once and a rotated id again, injects only well-formed wake lines for its own chats, backs off, and stops on unload", { skip: python === "" && "no python3", timeout: 60_000 }, () => {
+test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat once and a rotated id again, hands only well-formed wake lines to Hermes, attaches a chat Hermes accepted one for, backs off, stops a copy loaded before it, and stops on unload", { skip: python === "" && "no python3", timeout: 60_000 }, () => {
   const dir = tempDir("hermes-plugin-");
   const stubs = join(dir, "stubs");
   const plugins = join(dir, "plugins");
@@ -202,7 +224,7 @@ test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat on
   const run = spawnSync(python, ["-I", join(dir, "driver.py"), stubs, plugins, box, LINE], { encoding: "utf8", timeout: 55_000, env: { ...process.env, AGENTSOCKS_FAKE_DIR: box } });
   assert.equal(run.status, 0, run.stderr);
   const r = JSON.parse(run.stdout) as Record<string, unknown>;
-  assert.deepEqual(r.hooks, ["on_session_end", "on_session_open", "on_session_start", "pre_llm_call"]);
+  assert.deepEqual(r.hooks, ["on_session_finalize", "on_session_open", "on_session_start", "pre_llm_call"]);
   assert.ok((r.returns as unknown[]).every((v) => v === null), "no hook adds context or blocks anything");
   assert.equal(r.attach_A, 1, "three hooks and a later turn of one chat attach it once");
   assert.equal(r.attach_B, 1);
@@ -210,12 +232,16 @@ test("the generated Hermes plugin, loaded with a fake ctx: attaches each chat on
   assert.deepEqual(r.attach_sessions, ["20261123_101500_aaaaaa", "20261123_101600_bbbbbb", "20261123_111500_a2a2a2"], "a malformed or missing id is never attached");
   assert.ok((r.hook_seconds as number) < 0.5, `a hook waited ${String(r.hook_seconds)} s for a slow attach`);
   assert.equal(r.attach_C, 2, "a failed attach is tried again at the chat's next hook");
-  assert.deepEqual(r.injected, [[LINE, "user", "20261123_101500_aaaaaa"], [LINE, "user", "20261123_111500_a2a2a2"]], "only the notice line, to the chat it names, and only for chats this process attached");
+  assert.deepEqual(r.injected, [[LINE, "user", "20261123_101500_aaaaaa"], [LINE, "user", "20261123_000000_ffffff"]], "only the notice line, to the chat it names, and only where Hermes holds that chat");
+  assert.equal(r.attach_F, 1, "a chat open in Hermes that no hook had fired for is attached once Hermes accepts its wake");
+  assert.equal(r.warnings_unknown, 1, "a wake for a chat this Hermes does not hold is refused by Hermes and logged");
+  assert.equal(r.pollers_after_reload, 1, "loading the plugin again stops the copy loaded before it");
+  assert.equal(r.turn_end_injected, 1, "a chat stays attached across the end of a turn (Hermes fires on_session_end after every turn)");
   assert.equal(r.ended_injected, 0, "a wake for a chat Hermes ended and nobody reopened is not injected");
   assert.equal(r.attach_D, 2, "ending a chat and opening it again attaches it again");
   assert.equal(r.reopened_injected, 1, "the reopened chat is woken");
   assert.equal(r.attach_D_after_second_open, 3, "an open always re-attaches, even for a chat this process already holds");
-  assert.equal(r.warnings, 1, "an injection Hermes refuses is logged");
+  assert.equal(r.warnings, 2, "an injection Hermes refuses is logged");
   assert.equal((r.sinks as string[]).length, 1);
   assert.match((r.sinks as string[])[0]!, /^hermes-[0-9a-f]{16}$/);
   assert.deepEqual(r.poll_timeouts, [25000]);

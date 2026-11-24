@@ -5,7 +5,8 @@ export const PLUGIN_NAME = "agentsocks";
 export const PLUGIN_MARKER = "# agentsocks:managed hermes-plugin";
 export const PLUGIN_FILES = ["plugin.yaml", "__init__.py"] as const;
 export type PluginFile = (typeof PLUGIN_FILES)[number];
-export const PLUGIN_HOOKS = ["on_session_start", "on_session_open", "on_session_end", "pre_llm_call"] as const;
+// Hermes 0.23 fires on_session_end after every turn; on_session_finalize is the one that means the chat closed.
+export const PLUGIN_HOOKS = ["on_session_start", "on_session_open", "on_session_finalize", "pre_llm_call"] as const;
 
 export interface PluginSpec {
   node: string;
@@ -49,6 +50,7 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import threading
 
 NODE = ${py(spec.node)}
@@ -92,7 +94,6 @@ class Bridge:
         self.claimed = set()
         self.attached = set()
         self.children = set()
-        self.ready = threading.Event()
         self.stopped = threading.Event()
 
     def run(self, event, payload, timeout):
@@ -128,7 +129,7 @@ class Bridge:
         return self.touch(True, kwargs)
 
     def ended(self, **kwargs):
-        """on_session_end: agentsocks marks the thread ended, so forget the chat until it is attached again."""
+        """on_session_finalize: Hermes closed the chat, so forget it until it is attached again."""
         session = kwargs.get("session_id")
         if isinstance(session, str):
             with self.lock:
@@ -161,7 +162,6 @@ class Bridge:
             if reply is not None and reply.get("attached") is True:
                 if payload["session"] in self.claimed:
                     self.attached.add(payload["session"])
-                self.ready.set()
             else:
                 self.claimed.discard(payload["session"])
 
@@ -171,23 +171,23 @@ class Bridge:
         session, line = wake.get("session"), wake.get("line")
         if not isinstance(session, str) or not isinstance(line, str):
             return
+        if not SESSION.match(session) or len(line) > MAX_LINE or "\\n" in line or not line.startswith(PREFIX):
+            return
         with self.lock:
             ours = session in self.attached
-        if not ours or len(line) > MAX_LINE or "\\n" in line or not line.startswith(PREFIX):
-            return
         try:
             accepted = self.ctx.inject_message(line, session_key=session)
         except Exception:
             logger.warning("agentsocks: inject_message raised for session %s", session, exc_info=True)
             return
+        if accepted is True and not ours:
+            self.touch(False, {"session_id": session})
         if accepted is not True:
             logger.warning("agentsocks: Hermes did not start a turn for session %s (the chat is closed or unknown here, or plugins.entries.agentsocks.allow_gateway_injection is not true)", session)
 
     def poll(self):
         failures = 0
         while not self.stopped.is_set():
-            if not self.ready.wait(1.0):
-                continue
             reply = _parse(self.run("wake", {"sink": self.sink, "timeoutMs": POLL_MS}, POLL_MS / 1000.0 + POLL_SLACK))
             if self.stopped.is_set():
                 return
@@ -202,7 +202,6 @@ class Bridge:
 
     def close(self):
         self.stopped.set()
-        self.ready.set()
         with self.lock:
             children = list(self.children)
         for child in children:
@@ -216,8 +215,14 @@ def register(ctx):
     from agent.memory_provider import spawn_context_thread
 
     bridge = Bridge(ctx, spawn_context_thread)
+    # Hermes can load the plugin again into a running process (disable, then enable) without unloading the
+    # copy before it, whose poller would keep taking wakes for chats it can no longer reach.
+    previous = getattr(sys, "_agentsocks_bridge", None)
+    if previous is not None:
+        previous.close()
+    sys._agentsocks_bridge = bridge
     for name in HOOKS:
-        ctx.register_hook(name, {"on_session_open": bridge.opened, "on_session_end": bridge.ended}.get(name, bridge.hook))
+        ctx.register_hook(name, {"on_session_open": bridge.opened, "on_session_finalize": bridge.ended}.get(name, bridge.hook))
     ctx.on_unload(bridge.close)
     spawn_context_thread(bridge.poll, name="agentsocks-wake", daemon=True).start()
 `;
