@@ -4,11 +4,11 @@ import { gatewayOps } from "../gateway/ops.ts";
 import { labelOps } from "./labels.ts";
 import { messagingOps } from "./messaging.ts";
 import { opencodeOps } from "./opencode.ts";
-import { ompOps } from "./omp.ts";
 import { statusOps } from "./status.ts";
 import { taskOps } from "./tasks.ts";
 import { threadOps } from "./threads.ts";
 import { topOps } from "./top.ts";
+import { wakeOps } from "./wake.ts";
 import type { OpHandler, OpTable } from "./types.ts";
 
 export function registry(...tables: OpTable[]): ReadonlyMap<string, OpHandler> {
@@ -22,4 +22,4 @@ export function registry(...tables: OpTable[]): ReadonlyMap<string, OpHandler> {
   return ops;
 }
 
-export const OPS = registry(statusOps, threadOps, messagingOps, taskOps, channelOps, askOps, labelOps, topOps, gatewayOps, opencodeOps, ompOps);
+export const OPS = registry(statusOps, threadOps, messagingOps, taskOps, channelOps, askOps, labelOps, topOps, gatewayOps, opencodeOps, wakeOps);

@@ -7,6 +7,8 @@ import { findOwnClaudeSession } from "../claude.ts";
 import { agentReports, hookTrustStatus, runningBuildLine } from "../install.ts";
 import { statusLine as listAgentsStatus } from "../claudelist.ts";
 import { AGENT_LABELS } from "../agents/types.ts";
+import { AGENTS } from "../agents/index.ts";
+import { HERMES_API_WAKE_REACH, HERMES_NO_WAKE, wakeConfig } from "../agents/hermes/wake.ts";
 import { RELOAD_STEPS, listPeers } from "../peers.ts";
 import { brokerDisagrees, keySource, routingLine } from "../classifiercmd.ts";
 import { frame } from "./frame.ts";
@@ -56,7 +58,10 @@ export const doctor: Handler = async () => {
     else if (status.state === "not wired") console.log(`note: ${label} is installed but not wired; run \`agentsocks install --${id}\`${status.detail.length ? ` (${status.detail.join("; ")})` : ""}`);
     else healthy = check(status.state === "wired", `${label} integration`, `${status.state}${tail}${status.detail.length ? `: ${status.detail.join("; ")}` : ""}`) && healthy;
   }
-  const unconnected = (await listPeers({ includeUnconnected: true })).filter((p) => p.connected === false);
+  const peers = await listPeers({ includeUnconnected: true });
+  const threads = await brokerCall<{ threadId: string; wakeListening?: boolean }[]>("list_threads").catch(() => []);
+  const listening = new Set(threads.filter((t) => t.wakeListening).map((t) => t.threadId));
+  const unconnected = peers.filter((p) => p.connected === false);
   if (unconnected.length > 0) {
     const names = unconnected.map((p) => `${p.name} [${p.ref}]`).join(", ");
     const note = [
@@ -64,6 +69,19 @@ export const doctor: Handler = async () => {
       `      A message still wakes ${unconnected.length === 1 ? "it" : "them"} and ${unconnected.length === 1 ? "it reads" : "they read"} with \`agentsocks inbox\`. To give one full tools: ${RELOAD_STEPS}.`,
     ];
     console.log(await frame(note.join("\n")));
+  }
+  for (const spec of AGENTS) {
+    const all = peers.filter((p) => p.agent === spec.id && !p.subagent);
+    if (all.length === 0) continue;
+    if (spec.id === "hermes" && wakeConfig().state === "on") console.log(`note: ${HERMES_API_WAKE_REACH}`);
+    // A Hermes chat is wakeable when its plugin sink is polling the broker; every other agent decides for all its sessions at once.
+    const live = spec.id === "hermes" ? all.filter((p) => !(p.session && listening.has(p.session))) : spec.wake !== undefined && (spec.canWake?.() ?? true) ? [] : all;
+    if (live.length === 0) continue;
+    const label = AGENT_LABELS[spec.id];
+    const names = live.map((p) => `${p.name} [${p.ref}]`).join(", ");
+    const one = live.length === 1;
+    const why = spec.id === "hermes" ? HERMES_NO_WAKE : `A message waits until ${one ? "that session" : "each of them"} next calls a tool or ends a turn.`;
+    console.log(await frame(`warn: ${live.length} ${label} session${one ? "" : "s"} cannot be woken while idle: ${names}\n      ${why}`));
   }
   console.log(listAgentsStatus());
   console.log(routingLine());

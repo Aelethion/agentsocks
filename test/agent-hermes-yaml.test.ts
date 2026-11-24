@@ -109,8 +109,11 @@ test("an empty `pre_tool_call: []` or `hooks: {}` is converted and comes back ex
 
 test("the managed lines say what they are and how to remove them", () => {
   const edited = mustAdd(fixture("typical.yaml"));
-  assert.match(edited, /# >>> agentsocks:mcp_servers .*agentsocks uninstall/);
-  assert.match(edited, /# <<< agentsocks:mcp_servers <<</);
+  assert.match(edited, /^mcp_servers: # agentsocks: added this key; agentsocks uninstall removes it when nothing else is under it$/m);
+  assert.match(edited, /^ {2}# >>> agentsocks:mcp_servers\.agentsocks .*agentsocks uninstall/m);
+  assert.match(edited, /^ {2}# <<< agentsocks:mcp_servers\.agentsocks <<<$/m);
+  assert.match(edited, /^hooks: # agentsocks: added this key/m);
+  assert.doesNotMatch(edited, /^# >>> agentsocks/m, "no marker block owns a top-level key line");
 });
 
 const REFUSED: [string, RegExp][] = [
@@ -184,7 +187,7 @@ test("inspect reports the text of what is wired so status can compare it with th
   assert.equal(found.foreignServer, false);
   const all = found.hooks.join("\n");
   for (const event of EVENTS) assert.ok(all.includes(`hook hermes ${event}`), event);
-  assert.deepEqual(inspectManaged(fixture("typical.yaml")), { server: undefined, hooks: [], foreignServer: false });
+  assert.deepEqual(inspectManaged(fixture("typical.yaml")), { server: undefined, hooks: [], foreignServer: false, rescued: [] });
 });
 
 test("new event keys and a hook added to the user's last event both land under the right key", { skip: !hasPyYaml }, () => {
@@ -309,3 +312,78 @@ test("apostrophes, quotes and brackets that are part of ordinary values do not t
   assert.equal(removeManaged(edited).text, original);
   if (hasPyYaml) assert.deepEqual(load(edited).mcp_servers.a, { command: "x" });
 });
+
+
+// What 0.4.1 wrote when a file had neither key: two blocks that each own a top-level key line.
+const legacyBlock = (id: string, body: string[]): string => {
+  const sha = createHash("sha256").update(`${id}\0\0${body.join("\n")}`).digest("hex").slice(0, 12);
+  return [`# >>> agentsocks:${id} sha=${sha} >>> added by agentsocks install; agentsocks uninstall removes it`, ...body, `# <<< agentsocks:${id} <<<`].join("\n") + "\n";
+};
+const LEGACY_SERVER = ["mcp_servers:", "  agentsocks:", '    command: "/usr/bin/node"', '    args: ["/opt/agentsocks/src/cli.ts", "mcp", "--agent", "hermes"]', "    env:", '      NODE_NO_WARNINGS: "1"'];
+const LEGACY_HOOKS = ["hooks:", ...EVENTS.flatMap((e) => [`  ${e}:`, `    - command: "env AGENTSOCKS_HOOK=1 '/usr/bin/node' '/opt/agentsocks/src/cli.ts' hook hermes ${e}"`, "      timeout: 15"])];
+const GWORKSPACE = ["  gworkspace:", "    type: stdio", "    command: /usr/bin/uvx", "    args:", "      - workspace-mcp"];
+// The shape `hermes config set mcp_servers.gworkspace...` leaves (reproduced with Hermes 0.23.3): its writer puts the
+// new child after every comment trailing mcp_servers, which is after the hooks block's begin marker.
+const swallowed = (): string => {
+  const hooks = legacyBlock("hooks", LEGACY_HOOKS).split("\n");
+  return "model:\n  default: x\n" + legacyBlock("mcp_servers", LEGACY_SERVER) + [hooks[0], ...GWORKSPACE, ...hooks.slice(1)].join("\n") + "approvals:\n  mode: \"off\"\n";
+};
+
+test("an entry Hermes wrote inside an agentsocks block is kept by uninstall, which removes only the sha-checked lines agentsocks wrote", { skip: !hasPyYaml }, () => {
+  const before = swallowed();
+  const gone = removeManaged(before);
+  assert.equal(gone.problem, undefined);
+  assert.equal(gone.rescued.length, 1);
+  assert.match(gone.rescued[0]!, /gworkspace/);
+  assert.deepEqual(load(gone.text), { model: { default: "x" }, mcp_servers: { gworkspace: { type: "stdio", command: "/usr/bin/uvx", args: ["workspace-mcp"] } }, approvals: { mode: "off" } });
+  assert.doesNotMatch(gone.text, /AGENTSOCKS_HOOK|--agent/);
+});
+
+test("a reinstall over that file keeps the entry, moves it out of the block, and lays the markers inside the keys", { skip: !hasPyYaml }, () => {
+  const before = swallowed();
+  const found = inspectManaged(before);
+  assert.equal(found.rescued.length, 1, "status sees the foreign lines");
+  const r = addManaged(before, plan);
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  assert.equal(r.rescued.length, 1);
+  const doc = load(r.text);
+  assert.deepEqual(doc.mcp_servers.gworkspace, { type: "stdio", command: "/usr/bin/uvx", args: ["workspace-mcp"] });
+  assert.ok(doc.mcp_servers.agentsocks);
+  assert.equal(Object.keys(doc.hooks).length, EVENTS.length);
+  assert.deepEqual(doc.approvals, { mode: "off" });
+  assert.doesNotMatch(r.text, /^# >>> agentsocks/m);
+  const lines = r.text.split("\n");
+  const hooksAt = lines.findIndex((l) => l.startsWith("hooks:"));
+  assert.match(lines[hooksAt + 1]!, /^ {2}# >>> agentsocks:hooks\.events /, "the hooks marker sits directly under hooks:");
+  // and the file is clean afterwards: nothing to rescue, and uninstall leaves gworkspace where it is
+  assert.deepEqual(inspectManaged(r.text).rescued, []);
+  assert.deepEqual(load(removeManaged(r.text).text).mcp_servers, { gworkspace: doc.mcp_servers.gworkspace });
+});
+
+test("foreign lines mixed in among the lines agentsocks wrote are refused, and nothing is touched", () => {
+  const hooks = legacyBlock("hooks", LEGACY_HOOKS).split("\n");
+  const mixed = "model:\n  default: x\n" + [...hooks.slice(0, 4), "  my_event:", "    - command: /bin/true", ...hooks.slice(4)].join("\n");
+  const gone = removeManaged(mixed);
+  assert.equal(gone.text, mixed);
+  assert.match(gone.problem ?? "", /lines agentsocks did not write/);
+  const r = addManaged(mixed, plan);
+  assert.equal(r.ok, false);
+});
+
+test("after this install, entries Hermes's writer appends land outside every agentsocks block, and uninstall keeps the key they need", { skip: !hasPyYaml }, () => {
+  const edited = mustAdd("model:\n  default: x\n");
+  // Hermes appends a new child of a mapping after the comments that trail its last value: after our end marker.
+  const lines = edited.split("\n");
+  const endServer = lines.findIndex((l) => l.includes("# <<< agentsocks:mcp_servers.agentsocks"));
+  lines.splice(endServer + 1, 0, ...GWORKSPACE);
+  const endHooks = lines.findIndex((l) => l.includes("# <<< agentsocks:hooks.events"));
+  lines.splice(endHooks + 1, 0, "  on_session_start:", "    - command: /bin/echo");
+  const appended = lines.join("\n");
+  assert.deepEqual(inspectManaged(appended).rescued, []);
+  assert.equal(inspectManaged(appended).problem, undefined);
+  const gone = removeManaged(appended);
+  assert.equal(gone.problem, undefined);
+  assert.deepEqual(load(gone.text), { model: { default: "x" }, mcp_servers: { gworkspace: { type: "stdio", command: "/usr/bin/uvx", args: ["workspace-mcp"] } }, hooks: { on_session_start: [{ command: "/bin/echo" }] } });
+  assert.equal(mustAdd(gone.text), mustAdd(gone.text));
+});
+

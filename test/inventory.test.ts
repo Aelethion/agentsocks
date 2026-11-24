@@ -55,6 +55,7 @@ const OPS_EXPECTED = [
   "task_update",
   "top",
   "wait",
+  "wake_wait",
 ];
 
 const TOOLS_EXPECTED = [

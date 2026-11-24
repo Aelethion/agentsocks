@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import http from "node:http";
 import https from "node:https";
 import { isLocalUrl, readKeyFile } from "../../classifier.ts";
@@ -6,7 +7,9 @@ import { THREAD_ID } from "../../limits.ts";
 import { agentsocksEnvPath, configPath, expandHome } from "../../paths.ts";
 import { VERSION } from "../../version.ts";
 import { isRecord } from "../files.ts";
-import type { WakeOutcome } from "../types.ts";
+import { listeningSinks, offerWake, sinkId } from "../opencode/sink.ts";
+import type { WakeRequest, WakeOutcome } from "../types.ts";
+import { PLUGIN_NAME } from "./plugin.ts";
 
 export const KEY_VARIABLE = "HERMES_API_SERVER_KEY";
 const HERMES_OWN_VARIABLE = "API_SERVER_KEY";
@@ -53,10 +56,22 @@ export function wakeConfig(path = configPath()): WakeConfig {
   return { state: "on", base, key };
 }
 
-export function describeWake(config: WakeConfig): string {
-  if (config.state === "on") return `API wake on through ${config.base.origin}`;
+// Hermes 0.23 runs every CLI, TUI and Desktop turn through its gateway's session authority, and its API server
+// starts a turn only in a session whose source is the API server itself (gateway/session_api_turn.py refuses any
+// other with permission_denied, HTTP 409). So the API wake reaches API-created sessions and nothing else.
+export const HERMES_API_WAKE_REACH =
+  "the Hermes API wake reaches only sessions created through Hermes's API server; Hermes 0.23 refuses it (HTTP 409) for CLI, TUI and Desktop sessions, which wait for their next turn";
+export const NO_PLUGIN = "no agentsocks Hermes plugin is listening for this session";
+export const HERMES_NO_WAKE =
+  "No agentsocks Hermes plugin is polling, so a message waits until the next turn. Run `agentsocks install --hermes` and keep Hermes running with the chat open; see \"Waking an idle Hermes session\" in docs/GUIDE.md.";
+
+export const pluginDir = (home: string): string => join(home, "plugins", PLUGIN_NAME);
+
+// The plugin wakes CLI, TUI and Desktop chats; the API wake is an optional extra, so leaving it off says nothing.
+export function describeWake(config: WakeConfig): string | undefined {
+  if (config.state === "on") return `API wake on through ${config.base.origin}; ${HERMES_API_WAKE_REACH}`;
   if (config.state === "incomplete") return `API wake is not active: ${config.why}`;
-  return "no API wake configured, so a message waits until Hermes reads it (pull only)";
+  return undefined;
 }
 
 export interface WakeLimits {
@@ -110,7 +125,19 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
           if (seen > limits.maxBytes) req.destroy();
         });
         res.on("error", () => {});
-        done(status >= 200 && status < 300 ? { ok: true } : { ok: false, detail: status >= 300 && status < 400 ? `HTTP ${status} from ${where}; redirects are not followed` : `HTTP ${status} from ${where}` });
+        done(
+          status >= 200 && status < 300
+            ? { ok: true }
+            : {
+                ok: false,
+                detail:
+                  status >= 300 && status < 400
+                    ? `HTTP ${status} from ${where}; redirects are not followed`
+                    : status === 409
+                      ? `HTTP 409 from ${where}: Hermes starts API turns only in sessions its API server created, not in a CLI, TUI or Desktop session`
+                      : `HTTP ${status} from ${where}`,
+              },
+        );
       },
     );
     req.on("error", (err: NodeJS.ErrnoException) => done({ ok: false, detail: `${err.code === "ECONNREFUSED" ? "connection refused" : (err.code ?? "request failed")} at ${where}` }));
@@ -130,12 +157,17 @@ export function sendWake(settings: WakeSettings, sessionId: string, line: string
 const SESSION = /^hermes_([A-Za-z0-9_-]+)$/;
 
 export const hermesWake = {
-  canWake: (): boolean => wakeConfig().state === "on",
-  wake: async ({ thread, line }: { thread: { thread_id: string }; line: string }): Promise<WakeOutcome> => {
-    const config = wakeConfig();
-    if (config.state !== "on") return { ok: false, detail: config.state === "off" ? "no Hermes API is configured" : config.why };
+  wake: async ({ broker, thread, line }: WakeRequest): Promise<WakeOutcome> => {
     const session = THREAD_ID.test(thread.thread_id) ? SESSION.exec(thread.thread_id)?.[1] : undefined;
     if (!session) return { ok: false, detail: "not a Hermes session id" };
-    return sendWake(config, session, line);
+    const sink = sinkId(thread.remote);
+    if (sink && offerWake(broker, sink, { session, line, agent: "hermes" })) return { ok: true };
+    // A chat no plugin has attached yet may still be open in a backend: every listening plugin is offered it,
+    // and Hermes starts a turn only in the backend that holds that chat.
+    const offered = listeningSinks(broker, "hermes-").filter((id) => id !== sink).map((id) => offerWake(broker, id, { session, line, agent: "hermes" }));
+    if (offered.includes(true)) return { ok: true };
+    const config = wakeConfig();
+    if (config.state === "on") return sendWake(config, session, line);
+    return { ok: false, detail: config.state === "incomplete" ? `${NO_PLUGIN}; ${config.why}` : NO_PLUGIN };
   },
 };

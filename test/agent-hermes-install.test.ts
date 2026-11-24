@@ -99,7 +99,7 @@ test("install adds the MCP server and the five shell hooks to an existing config
   assert.match(text, /matcher: "\^mcp_\{1,2\}agentsocks_\{1,2\}\.\*\$"/);
   assert.match(r.log.join("\n"), /hermes: wired .*config\.yaml/);
   assert.match(r.log.join("\n"), /approve the 5 agentsocks hooks.*hermes --accept-hooks chat/i);
-  assert.match(r.log.join("\n"), /no API wake configured/);
+  assert.doesNotMatch(r.log.join("\n"), /API wake|pull only/, "with the API wake off, install says nothing about it");
 });
 
 test("the hook commands start with env and the marker, because Hermes runs a hook with shell=False and a bare VAR=1 would be taken for the program", () => {
@@ -145,7 +145,7 @@ test("an install from a different place updates the entries where they are inste
   assert.ok(!text.includes("/opt/agentsocks"));
   assert.equal(text.match(/hook hermes pre_llm_call/g)?.length, 1);
   assert.equal(text.match(/^ {2}agentsocks:/gm)?.length, 1);
-  assert.deepEqual(moved.backups, [config()]);
+  assert.deepEqual(moved.backups, [config(), join(home, ".hermes", "plugins", "agentsocks", "__init__.py")]);
 });
 
 test("the config file is created private when there was none, and an existing file keeps its permissions and is not left beside a temp file", () => {
@@ -155,7 +155,8 @@ test("the config file is created private when there was none, and an existing fi
   chmodSync(config(), 0o640);
   installer.install(rig(home).ctx);
   assert.equal(statSync(config()).mode & 0o777, 0o640);
-  assert.deepEqual(readdirSync(join(home, ".hermes")), ["config.yaml"]);
+  assert.deepEqual(readdirSync(join(home, ".hermes")), ["config.yaml", "plugins"]);
+  assert.deepEqual(readdirSync(join(home, ".hermes", "plugins", "agentsocks")).sort(), ["__init__.py", "plugin.yaml"]);
 });
 
 test("a config.yaml that is a symlink (a dotfiles setup) stays a symlink and its target is the file that is edited and restored", () => {
@@ -274,7 +275,7 @@ test("status: not installed, then not wired, then partly wired until the hooks a
   approveAll(r);
   const done = installer.status(r.ctx);
   assert.equal(done.state, "wired");
-  assert.match(done.detail.join("; "), /no API wake configured/);
+  assert.doesNotMatch(done.detail.join("; "), /API wake|pull only/);
 });
 
 test("status counts hooks_auto_accept as consent, and one hook still unapproved keeps it at partly wired", () => {
@@ -340,6 +341,5 @@ test("the registry's Hermes entry is this module, with the API wake wired in and
   assert.equal(spec, hermesAgent);
   assert.equal(spec.live, "untested");
   assert.equal(typeof spec.wake, "function");
-  assert.equal(spec.canWake?.(), false, "without a configured Hermes API there is nothing to wake through");
   assert.ok(agentReports().some((r) => r.id === "hermes"));
 });
